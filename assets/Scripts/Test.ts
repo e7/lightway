@@ -1,5 +1,5 @@
 import { _decorator, Component, Node } from 'cc';
-import { Color } from './logic/Cell';
+import { Color } from './logic/GridCell';
 import { Assert } from './assert/Assert';
 
 const { ccclass, property } = _decorator;
