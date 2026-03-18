@@ -71,32 +71,50 @@ export class Color {
   }
 }
 
-export const IdRaySource = 'RaySource' as const;
-type RaySource = typeof IdRaySource;
-export const IdLittleLight = 'LittleLight' as const;
-type LittleLight = typeof IdLittleLight;
-export const IdRaySeg = 'RaySeg' as const;
-type RaySeg = typeof IdRaySeg;
-export const IdReflector45 = 'Reflector45' as const;
-type Reflector45 = typeof IdReflector45;
-export const IdReflector90 = 'Reflector90' as const;
-type Reflector90 = typeof IdReflector90;
-
 // 道具类型
-type ItemType =
-  | RaySource // 光源
-  | LittleLight // 小灯
-  | RaySeg // 光路
-  | Reflector45 // 45度反射镜
-  | Reflector90; // 90度反射镜
+export const IdRaySource = 'RaySource' as const;
+type _RaySource = typeof IdRaySource;
+export const IdLittleLight = 'LittleLight' as const;
+type _LittleLight = typeof IdLittleLight;
+export const IdRaySeg = 'RaySeg' as const;
+type _RaySeg = typeof IdRaySeg;
+export const IdReflector45 = 'Reflector45' as const;
+type _Reflector45 = typeof IdReflector45;
+export const IdReflector90 = 'Reflector90' as const;
+type _Reflector90 = typeof IdReflector90;
+
+interface RaySource {
+  type: _RaySource;
+  direction: Direction;
+  color: Color;
+}
+
+interface LittleLight {
+  type: _LittleLight;
+  color: Color;
+}
+
+interface RaySeg {
+  type: _RaySeg;
+  direction: Direction;
+  color: Color;
+}
+
+interface Reflector45 {
+  type: _Reflector45;
+  direction: Direction;
+  color45: Nullable<Color>;
+  color135: Nullable<Color>;
+}
+
+interface Reflector90 {
+  type: _Reflector90;
+  direction: Direction;
+  color: Nullable<Color>;
+}
 
 // 道具
-export type Item =
-  | { type: RaySource; direction: Direction; color: Color }
-  | { type: LittleLight; color: Color }
-  | { type: RaySeg; direction: Direction; color: Color }
-  | { type: Reflector45; direction: Direction; color45: Nullable<Color>; color135: Nullable<Color> }
-  | { type: Reflector90; direction: Direction; color: Nullable<Color> };
+export type Item = RaySource | LittleLight | RaySeg | Reflector45 | Reflector90;
 
 export class GridCell {
   item: Nullable<Item>;
