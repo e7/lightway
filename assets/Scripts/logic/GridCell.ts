@@ -1,14 +1,30 @@
-export enum Direction {
-  None,
-  Up,
-  Down,
-  Left,
-  Right,
-  UpLeft,
-  UpRight,
-  DownLeft,
-  DownRight,
-}
+export const IdUp = 'Up' as const;
+export const IdDown = 'Down' as const;
+export const IdLeft = 'Left' as const;
+export const IdRight = 'Right' as const;
+export const IdUpLeft = 'UpLeft' as const;
+export const IdUpRight = 'UpRight' as const;
+export const IdDownLeft = 'DownLeft' as const;
+export const IdDownRight = 'DownRight' as const;
+export type Direction =
+  | typeof IdUp
+  | typeof IdDown
+  | typeof IdLeft
+  | typeof IdRight
+  | typeof IdUpLeft
+  | typeof IdUpRight
+  | typeof IdDownLeft
+  | typeof IdDownRight;
+// export enum Direction {
+//   Up,
+//   Down,
+//   Left,
+//   Right,
+//   UpLeft,
+//   UpRight,
+//   DownLeft,
+//   DownRight,
+// }
 
 // 定义三原色位标记（用二进制表示，方便叠加）
 enum ColorBit {
@@ -76,35 +92,51 @@ export const IdRaySource = 'RaySource' as const;
 type _RaySource = typeof IdRaySource;
 export const IdLittleLight = 'LittleLight' as const;
 type _LittleLight = typeof IdLittleLight;
-export const IdRaySeg = 'RaySeg' as const;
-type _RaySeg = typeof IdRaySeg;
+export const IdRaySegs = 'RaySeg' as const;
+type _RaySegs = typeof IdRaySegs;
 export const IdReflector45 = 'Reflector45' as const;
 type _Reflector45 = typeof IdReflector45;
 export const IdReflector90 = 'Reflector90' as const;
 type _Reflector90 = typeof IdReflector90;
 
 interface RaySource {
-  type: _RaySource;
-  direction: Direction;
-  color: Color;
+  readonly type: _RaySource;
+  readonly direction: Direction;
+  readonly color: Color; // 发射的颜色
+  showColor: Color; // 最终渲染出来的颜色
 }
 
 interface LittleLight {
-  type: _LittleLight;
-  color: Color;
+  readonly type: _LittleLight;
+  color: Color; // 小灯颜色
+  segs: RaySegs;
 }
 
-interface RaySeg {
-  type: _RaySeg;
-  direction: Direction;
-  color: Color;
+const Angles = [0, 45, 90, 135, 180, 225, 270, 315] as const;
+export type Angle = (typeof Angles)[number];
+export const DirectionToAngle = {
+  IdRight: 0, IdUpRight: 45, IdUp: 90, IdUpLeft: 135,
+  IdLeft: 180, IdDownLeft: 225, IdDown: 270, IdDownRight: 315,
+} as const;
+interface RaySegs {
+  type: _RaySegs;
+  colors: Record<Angle, Nullable<Color>>; // 各个角度的入射光线颜色
+}
+export function createRaySeg(init?: Partial<Record<Angle, Color>>): Record<Angle, Nullable<Color>> {
+  const result = {} as Record<Angle, Nullable<Color>>;
+
+  for (const a of Angles) {
+    result[a] = init?.[a] ?? null;
+  }
+
+  return result;
 }
 
 interface Reflector45 {
   type: _Reflector45;
   direction: Direction;
-  color45: Nullable<Color>;
-  color135: Nullable<Color>;
+  rayColor45: Nullable<Color>;
+  rayColor135: Nullable<Color>;
 }
 
 interface Reflector90 {
@@ -114,7 +146,7 @@ interface Reflector90 {
 }
 
 // 道具
-export type Item = RaySource | LittleLight | RaySeg | Reflector45 | Reflector90;
+export type Item = RaySource | LittleLight | RaySegs | Reflector45 | Reflector90;
 
 export class GridCell {
   item: Nullable<Item>;
