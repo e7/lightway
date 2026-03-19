@@ -1,30 +1,49 @@
-export const IdUp = 'Up' as const;
-export const IdDown = 'Down' as const;
-export const IdLeft = 'Left' as const;
-export const IdRight = 'Right' as const;
-export const IdUpLeft = 'UpLeft' as const;
-export const IdUpRight = 'UpRight' as const;
-export const IdDownLeft = 'DownLeft' as const;
-export const IdDownRight = 'DownRight' as const;
+// export const IdUp = 'Up' as const;
+// export const IdDown = 'Down' as const;
+// export const IdLeft = 'Left' as const;
+// export const IdRight = 'Right' as const;
+// export const IdUpLeft = 'UpLeft' as const;
+// export const IdUpRight = 'UpRight' as const;
+// export const IdDownLeft = 'DownLeft' as const;
+// export const IdDownRight = 'DownRight' as const;
+// export type Direction =
+//   | { name: typeof IdUp; vec: { x: 0; y: 1 } }
+//   | { name: typeof IdDown; vec: { x: 0; y: -1 } }
+//   | { name: typeof IdLeft; vec: { x: -1; y: 0 } }
+//   | { name: typeof IdRight; vec: { x: 1; y: 0 } }
+//   | { name: typeof IdUpLeft; vec: { x: -1; y: 1 } }
+//   | { name: typeof IdUpRight; vec: { x: 1; y: 1 } }
+//   | { name: typeof IdDownLeft; vec: { x: -1; y: -1 } }
+//   | { name: typeof IdDownRight; vec: { x: 1; y: -1 } };
+export const Up = { x: 0, y: 1 } as const;
+export const Down = { x: 0, y: -1 } as const;
 export type Direction =
-  | typeof IdUp
-  | typeof IdDown
-  | typeof IdLeft
-  | typeof IdRight
-  | typeof IdUpLeft
-  | typeof IdUpRight
-  | typeof IdDownLeft
-  | typeof IdDownRight;
-// export enum Direction {
-//   Up,
-//   Down,
-//   Left,
-//   Right,
-//   UpLeft,
-//   UpRight,
-//   DownLeft,
-//   DownRight,
-// }
+  // | { x: 0; y: 1 } // up
+  | typeof Up
+  // | { x: 0; y: -1 } // down
+  | typeof Down
+  | { x: -1; y: 0 } // left
+  | { x: 1; y: 0 } // right
+  | { x: -1; y: 1 } // up-left
+  | { x: 1; y: 1 } // up-right
+  | { x: -1; y: -1 } // down-left
+  | { x: 1; y: -1 }; // down-right
+
+// 是否反向
+export function oppositeDirection(dir1: Direction, dir2: Direction): boolean {
+  return dir1.x === -dir2.x && dir1.y === -dir2.y;
+}
+
+// 计算反射向量
+function reflectVec(v: Vec, normal: Vec): Vec {
+  // normal 必须是单位向量
+  const dot = v.x * normal.x + v.y * normal.y;
+
+  return {
+    x: v.x - 2 * dot * normal.x,
+    y: v.y - 2 * dot * normal.y,
+  };
+}
 
 // 定义三原色位标记（用二进制表示，方便叠加）
 enum ColorBit {
@@ -109,19 +128,21 @@ interface RaySource {
 interface LittleLight {
   readonly type: _LittleLight;
   color: Color; // 小灯颜色
-  segs: RaySegs;
 }
 
 const Angles = [0, 45, 90, 135, 180, 225, 270, 315] as const;
 export type Angle = (typeof Angles)[number];
 export const DirectionToAngle = {
-  IdRight: 0, IdUpRight: 45, IdUp: 90, IdUpLeft: 135,
-  IdLeft: 180, IdDownLeft: 225, IdDown: 270, IdDownRight: 315,
+  IdRight: 0,
+  IdUpRight: 45,
+  IdUp: 90,
+  IdUpLeft: 135,
+  IdLeft: 180,
+  IdDownLeft: 225,
+  IdDown: 270,
+  IdDownRight: 315,
 } as const;
-interface RaySegs {
-  type: _RaySegs;
-  colors: Record<Angle, Nullable<Color>>; // 各个角度的入射光线颜色
-}
+
 export function createRaySeg(init?: Partial<Record<Angle, Color>>): Record<Angle, Nullable<Color>> {
   const result = {} as Record<Angle, Nullable<Color>>;
 
@@ -135,19 +156,17 @@ export function createRaySeg(init?: Partial<Record<Angle, Color>>): Record<Angle
 interface Reflector45 {
   type: _Reflector45;
   direction: Direction;
-  rayColor45: Nullable<Color>;
-  rayColor135: Nullable<Color>;
 }
 
 interface Reflector90 {
   type: _Reflector90;
   direction: Direction;
-  color: Nullable<Color>;
 }
 
 // 道具
-export type Item = RaySource | LittleLight | RaySegs | Reflector45 | Reflector90;
+export type Item = RaySource | LittleLight | Reflector45 | Reflector90;
 
 export class GridCell {
   item: Nullable<Item>;
+  rays: { direction: Direction; color: Color }[]; // 各个角度的入射光线
 }

@@ -6,11 +6,6 @@ class Level {
   items: gc.Item[];
 }
 
-const DirectionToDelta = {
-  [gc.IdUp]: [0, 1], [gc.IdUpLeft]: [-1, 1], [gc.IdLeft]: [-1, 0], [gc.IdDownLeft]: [-1, -1],
-  [gc.IdDown]: [0, -1], [gc.IdDownRight]: [1, -1], [gc.IdRight]: [1, 0], [gc.IdUpRight]: [1, 1],
-} as const;
-
 class Board {
   grid: gc.GridCell[][];
   size: number;
@@ -36,9 +31,7 @@ class Board {
   }
 
   // 清空光路防止残留
-  clearRayPath() {
-
-  }
+  clearRayPath() {}
 
   // 光路渲染
   render() {
@@ -48,24 +41,36 @@ class Board {
       }
 
       const raySource: gc.Item = element.item;
-      const [deltaX, deltaY] = DirectionToDelta[raySource.direction];
+      const { x: deltaX, y: deltaY } = raySource.direction;
 
-      const srcAngle: gc.Angle = gc.DirectionToAngle[raySource.direction]; // 光源角度
+      let rayDire: gc.Direction = raySource.direction; // 光向（可能变化）
+      let rayColor: gc.Color = raySource.color; // 光色（可能变化）
       let [x, y]: [number, number] = [element.x + deltaX, element.y + deltaY];
       while (x * y >= 0 && x * y < this.size * this.size) {
         const cell: gc.GridCell = this.grid[y][x];
 
-        if (cell.item === null) {
-          cell.item = {type: gc.IdRaySegs, colors: gc.createRaySeg({[srcAngle]: raySource.color})};
-        } else {
+        // 渲染光线
+        cell.rays.forEach((ray) => {
+          if (gc.oppositeDirection(ray.direction, rayDire)) {
+            // 修改光色
+          }
+        });
+        cell.rays.push({ direction: rayDire, color: rayColor });
+
+        // 渲染道具
+        if (cell.item !== null) {
           switch (cell.item.type) {
-            case gc.IdRaySegs:
-              cell.item.colors[srcAngle] = raySource.color;
+            case gc.IdLittleLight:
+              const littleLight = cell.item;
+              break;
+
+            case gc.IdReflector90:
+              const reflector = cell.item;
               break;
           }
         }
 
-        // next
+        // next cell
         x += deltaX;
         y += deltaY;
       }
