@@ -1,48 +1,65 @@
-// export const IdUp = 'Up' as const;
-// export const IdDown = 'Down' as const;
-// export const IdLeft = 'Left' as const;
-// export const IdRight = 'Right' as const;
-// export const IdUpLeft = 'UpLeft' as const;
-// export const IdUpRight = 'UpRight' as const;
-// export const IdDownLeft = 'DownLeft' as const;
-// export const IdDownRight = 'DownRight' as const;
-// export type Direction =
-//   | { name: typeof IdUp; vec: { x: 0; y: 1 } }
-//   | { name: typeof IdDown; vec: { x: 0; y: -1 } }
-//   | { name: typeof IdLeft; vec: { x: -1; y: 0 } }
-//   | { name: typeof IdRight; vec: { x: 1; y: 0 } }
-//   | { name: typeof IdUpLeft; vec: { x: -1; y: 1 } }
-//   | { name: typeof IdUpRight; vec: { x: 1; y: 1 } }
-//   | { name: typeof IdDownLeft; vec: { x: -1; y: -1 } }
-//   | { name: typeof IdDownRight; vec: { x: 1; y: -1 } };
-export const Up = { x: 0, y: 1 } as const;
-export const Down = { x: 0, y: -1 } as const;
-export type Direction =
-  // | { x: 0; y: 1 } // up
-  | typeof Up
-  // | { x: 0; y: -1 } // down
-  | typeof Down
-  | { x: -1; y: 0 } // left
-  | { x: 1; y: 0 } // right
-  | { x: -1; y: 1 } // up-left
-  | { x: 1; y: 1 } // up-right
-  | { x: -1; y: -1 } // down-left
-  | { x: 1; y: -1 }; // down-right
+const PI = Math.PI;
+export const Dir0 = 0;
+export const DirPI_8 = PI / 8;
+export const DirPI_4 = 2 * PI / 8;
+export const Dir3PI_8 = 3 * PI / 8;
+export const DirPI_2 = 4 * PI / 8;
+export const Dir5PI_8 = 5 * PI / 8;
+export const Dir3PI_4 = 6 * PI / 8;
+export const Dir7PI_8 = 7 * PI / 8;
+export const DirPI = 8 * PI / 8;
+export const Dir9PI_8 = 9 * PI / 8;
+export const Dir5PI_4 = 10 * PI / 8;
+export const Dir11PI_8 = 11 * PI / 8;
+export const Dir3PI_2 = 12 * PI / 8;
+export const Dir13PI_8 = 13 * PI / 8;
+export const Dir7PI_4 = 14 * PI / 8;
+export const Dir15PI_8 = 15 * PI / 8;
 
-// 是否反向
-export function oppositeDirection(dir1: Direction, dir2: Direction): boolean {
-  return dir1.x === -dir2.x && dir1.y === -dir2.y;
+export type Direction =
+  | typeof Dir0
+  | typeof DirPI_8
+  | typeof DirPI_4
+  | typeof Dir3PI_8
+  | typeof DirPI_2
+  | typeof Dir5PI_8
+  | typeof Dir3PI_4
+  | typeof Dir7PI_8
+  | typeof DirPI
+  | typeof Dir9PI_8
+  | typeof Dir5PI_4
+  | typeof Dir11PI_8
+  | typeof Dir3PI_2
+  | typeof Dir13PI_8
+  | typeof Dir7PI_4
+  | typeof Dir15PI_8;
+
+// 把连续的弧度精确映射到 8 个网格遍历步长 (deltaX, deltaY)
+export function getGridStep(angleRad: Direction): [number, number] {
+  // 标准化到 0 ~ 2π 之间
+  let a = (angleRad % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+  const EPSILON = 1e-5;
+
+  // 判断是否在坐标轴上
+  if (Math.abs(a - 0) < EPSILON || Math.abs(a - Math.PI * 2) < EPSILON) return [1, 0]; // 0度 (右)
+  if (Math.abs(a - Math.PI / 2) < EPSILON) return [0, 1]; // 90度 (上)
+  if (Math.abs(a - Math.PI) < EPSILON) return [-1, 0]; // 180度 (左)
+  if (Math.abs(a - Math.PI * 1.5) < EPSILON) return [0, -1]; // 270度 (下)
+
+  // 落在四个象限
+  if (a > 0 && a < Math.PI / 2) return [1, 1];           // 第一象限
+  if (a > Math.PI / 2 && a < Math.PI) return [-1, 1];    // 第二象限
+  if (a > Math.PI && a < Math.PI * 1.5) return [-1, -1]; // 第三象限
+  return [1, -1];                                        // 第四象限
 }
 
-// 计算反射向量
-function reflectVec(v: Vec, normal: Vec): Vec {
-  // normal 必须是单位向量
-  const dot = v.x * normal.x + v.y * normal.y;
+// 是否反向 (判断弧度是否相差 PI)
+export function oppositeDirection(dir1: Direction, dir2: Direction): boolean {
+  return Math.abs(Math.cos(dir1) + Math.cos(dir2)) < 1e-4 && Math.abs(Math.sin(dir1) + Math.sin(dir2)) < 1e-4;
+}
 
-  return {
-    x: v.x - 2 * dot * normal.x,
-    y: v.y - 2 * dot * normal.y,
-  };
+export function directionKey(dir: Direction): string {
+  return dir.toFixed(4);
 }
 
 // 定义三原色位标记（用二进制表示，方便叠加）
@@ -64,7 +81,7 @@ export class Color {
   static readonly Cyan = new Color(ColorBit.Green | ColorBit.Blue); // 110 青
   static readonly White = new Color(ColorBit.Red | ColorBit.Green | ColorBit.Blue); // 111 白
 
-  private constructor(private readonly value: number) {}
+  private constructor(private readonly value: number) { }
 
   /**
    * 颜色叠加（核心：按位或，自动合并成正确混合色）
@@ -72,6 +89,10 @@ export class Color {
   add(other: Color): Color {
     const merged = this.value | other.value;
     return Color.fromValue(merged);
+  }
+
+  static add(color1: Color, color2: Color): Color {
+    return Color.fromValue(color1.value | color2.value);
   }
 
   equals(other: Color | null | undefined): boolean {
@@ -118,47 +139,38 @@ type _Reflector45 = typeof IdReflector45;
 export const IdReflector90 = 'Reflector90' as const;
 type _Reflector90 = typeof IdReflector90;
 
-interface RaySource {
+export interface RaySource {
   readonly type: _RaySource;
   readonly direction: Direction;
   readonly color: Color; // 发射的颜色
   showColor: Color; // 最终渲染出来的颜色
 }
 
-interface LittleLight {
+export interface LittleLight {
   readonly type: _LittleLight;
   color: Color; // 小灯颜色
+  on: boolean; // 是否已点亮
 }
 
-const Angles = [0, 45, 90, 135, 180, 225, 270, 315] as const;
-export type Angle = (typeof Angles)[number];
+
 export const DirectionToAngle = {
-  IdRight: 0,
-  IdUpRight: 45,
-  IdUp: 90,
-  IdUpLeft: 135,
-  IdLeft: 180,
-  IdDownLeft: 225,
-  IdDown: 270,
-  IdDownRight: 315,
+  Id0: Dir0,
+  IdPI_4: DirPI_4,
+  IdPI_2: DirPI_2,
+  Id3PI_4: Dir3PI_4,
+  IdPI: DirPI,
+  Id5PI_4: Dir5PI_4,
+  Id3PI_2: Dir3PI_2,
+  Id7PI_4: Dir7PI_4,
 } as const;
+export type Angle = typeof DirectionToAngle[keyof typeof DirectionToAngle];
 
-export function createRaySeg(init?: Partial<Record<Angle, Color>>): Record<Angle, Nullable<Color>> {
-  const result = {} as Record<Angle, Nullable<Color>>;
-
-  for (const a of Angles) {
-    result[a] = init?.[a] ?? null;
-  }
-
-  return result;
-}
-
-interface Reflector45 {
+export interface Reflector45 {
   type: _Reflector45;
   direction: Direction;
 }
 
-interface Reflector90 {
+export interface Reflector90 {
   type: _Reflector90;
   direction: Direction;
 }
@@ -166,7 +178,12 @@ interface Reflector90 {
 // 道具
 export type Item = RaySource | LittleLight | Reflector45 | Reflector90;
 
+export interface Ray {
+  direction: Direction;
+  color: Color;
+}
+
 export class GridCell {
   item: Nullable<Item>;
-  rays: { direction: Direction; color: Color }[]; // 各个角度的入射光线
+  rays: Ray[]; // 各个角度的入射光线
 }
