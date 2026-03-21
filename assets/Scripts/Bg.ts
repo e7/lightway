@@ -17,10 +17,10 @@ export class Bg extends Component {
 
     update(deltaTime: number) {
         let position1 = this.bg01.position;
-        this.bg01.setPosition(position1.x, position1.y - this.speed*deltaTime, position1.z)
+        this.bg01.setPosition(position1.x, position1.y - this.speed * deltaTime)
 
         let position2 = this.bg02.position;
-        this.bg02.setPosition(position2.x, position2.y - this.speed*deltaTime, position2.z)
+        this.bg02.setPosition(position2.x, position2.y - this.speed * deltaTime)
     }
 }
 

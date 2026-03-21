@@ -1,20 +1,19 @@
-const PI = Math.PI;
 export const Dir0 = 0;
-export const DirPI_8 = PI / 8;
-export const DirPI_4 = 2 * PI / 8;
-export const Dir3PI_8 = 3 * PI / 8;
-export const DirPI_2 = 4 * PI / 8;
-export const Dir5PI_8 = 5 * PI / 8;
-export const Dir3PI_4 = 6 * PI / 8;
-export const Dir7PI_8 = 7 * PI / 8;
-export const DirPI = 8 * PI / 8;
-export const Dir9PI_8 = 9 * PI / 8;
-export const Dir5PI_4 = 10 * PI / 8;
-export const Dir11PI_8 = 11 * PI / 8;
-export const Dir3PI_2 = 12 * PI / 8;
-export const Dir13PI_8 = 13 * PI / 8;
-export const Dir7PI_4 = 14 * PI / 8;
-export const Dir15PI_8 = 15 * PI / 8;
+export const DirPI_8 = 1;
+export const DirPI_4 = 2;
+export const Dir3PI_8 = 3;
+export const DirPI_2 = 4;
+export const Dir5PI_8 = 5;
+export const Dir3PI_4 = 6;
+export const Dir7PI_8 = 7;
+export const DirPI = 8;
+export const Dir9PI_8 = 9;
+export const Dir5PI_4 = 10;
+export const Dir11PI_8 = 11;
+export const Dir3PI_2 = 12;
+export const Dir13PI_8 = 13;
+export const Dir7PI_4 = 14;
+export const Dir15PI_8 = 15;
 
 export type Direction =
   | typeof Dir0
@@ -34,32 +33,31 @@ export type Direction =
   | typeof Dir7PI_4
   | typeof Dir15PI_8;
 
-// 把连续的弧度精确映射到 8 个网格遍历步长 (deltaX, deltaY)
-export function getGridStep(angleRad: Direction): [number, number] {
-  // 标准化到 0 ~ 2π 之间
-  let a = (angleRad % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-  const EPSILON = 1e-5;
+// 把离散方向精确映射到 8 个网格遍历步长 (deltaX, deltaY)
+export function getGridStep(dir: Direction): [number, number] {
+  // 标准化到 0 ~ 15 之间
+  let a = (dir % 16 + 16) % 16;
 
   // 判断是否在坐标轴上
-  if (Math.abs(a - 0) < EPSILON || Math.abs(a - Math.PI * 2) < EPSILON) return [1, 0]; // 0度 (右)
-  if (Math.abs(a - Math.PI / 2) < EPSILON) return [0, 1]; // 90度 (上)
-  if (Math.abs(a - Math.PI) < EPSILON) return [-1, 0]; // 180度 (左)
-  if (Math.abs(a - Math.PI * 1.5) < EPSILON) return [0, -1]; // 270度 (下)
+  if (a === 0) return [1, 0]; // 0度 (右)
+  if (a === 4) return [0, 1]; // 90度 (上)
+  if (a === 8) return [-1, 0]; // 180度 (左)
+  if (a === 12) return [0, -1]; // 270度 (下)
 
   // 落在四个象限
-  if (a > 0 && a < Math.PI / 2) return [1, 1];           // 第一象限
-  if (a > Math.PI / 2 && a < Math.PI) return [-1, 1];    // 第二象限
-  if (a > Math.PI && a < Math.PI * 1.5) return [-1, -1]; // 第三象限
+  if (a > 0 && a < 4) return [1, 1];           // 第一象限
+  if (a > 4 && a < 8) return [-1, 1];    // 第二象限
+  if (a > 8 && a < 12) return [-1, -1]; // 第三象限
   return [1, -1];                                        // 第四象限
 }
 
-// 是否反向 (判断弧度是否相差 PI)
+// 是否反向 (判断方向是否相差 8)
 export function oppositeDirection(dir1: Direction, dir2: Direction): boolean {
-  return Math.abs(Math.cos(dir1) + Math.cos(dir2)) < 1e-4 && Math.abs(Math.sin(dir1) + Math.sin(dir2)) < 1e-4;
+  return (dir1 + 8) % 16 === dir2 % 16;
 }
 
 export function directionKey(dir: Direction): string {
-  return dir.toFixed(4);
+  return dir.toString();
 }
 
 // 定义三原色位标记（用二进制表示，方便叠加）
