@@ -9,7 +9,7 @@ export class BoardView extends Component {
 
     // 逻辑常量
     private readonly gridSize = 15;
-    private readonly cellSize = 46;
+    private readonly cellSize = 48;
 
     start() {
         // 游戏启动时：如果没有手动关联，就自动获取当前节点上挂载的 Graphics 组件
@@ -60,7 +60,7 @@ export class BoardView extends Component {
         g.stroke();
 
         // 在 (0, 0) 格子上画一个红色的实心圆
-        this.drawCircle(0, 0, new Color(255, 80, 80, 255)); // 柔和的红色
+        this.drawCircle(0, 0, new Color(202, 42, 6, 255)); // 柔和的红色
 
         // 在 (1, 2) 格子上画一个蓝色的实心圆
         this.drawCircle(1, 2, new Color(80, 180, 255, 255)); // 柔和的蓝色
