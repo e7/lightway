@@ -130,8 +130,6 @@ export const IdRaySource = 'RaySource' as const;
 type _RaySource = typeof IdRaySource;
 export const IdLittleLight = 'LittleLight' as const;
 type _LittleLight = typeof IdLittleLight;
-export const IdRaySegs = 'RaySeg' as const;
-type _RaySegs = typeof IdRaySegs;
 export const IdReflector45 = 'Reflector45' as const;
 type _Reflector45 = typeof IdReflector45;
 export const IdReflector90 = 'Reflector90' as const;
@@ -141,7 +139,6 @@ export interface RaySource {
   readonly type: _RaySource;
   readonly direction: Direction;
   readonly color: Color; // 发射的颜色
-  showColor: Color; // 最终渲染出来的颜色
 }
 
 export interface LittleLight {
@@ -184,4 +181,9 @@ export interface Ray {
 export class GridCell {
   item: Nullable<Item>;
   rays: Ray[]; // 各个角度的入射光线
+
+  constructor() {
+    this.item = null;
+    this.rays = [];
+  }
 }

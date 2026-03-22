@@ -1,18 +1,19 @@
 import * as gc from './GridCell';
 import { reflectAngle } from './Reflect';
 // 关卡
-class Level {
+export class Level {
   staticItems: { x: number; y: number; item: gc.Item }[];
   items: gc.Item[];
 }
 
-class Board {
+export class Board {
   grid: gc.GridCell[][];
   size: number;
   level: Nullable<Level>;
 
   constructor(lenOfSide: number) {
     this.size = lenOfSide;
+    this.grid = [];
 
     for (let y = 0; y < lenOfSide; y++) {
       this.grid[y] = [];
@@ -31,7 +32,7 @@ class Board {
   }
 
   // 清空光路防止残留
-  clearRayPath() {}
+  clearRayPath() { }
 
   // 光路渲染
   render() {
@@ -44,11 +45,10 @@ class Board {
 
       let rayDire: gc.Direction = raySource.direction; // 光向弧度（通过反射可能变化）
       let rayColor: gc.Color = raySource.color; // 光色（可能变化）
-      
+
       let step = gc.getGridStep(rayDire); // 从当前弧度获得网格步长
       let [x, y]: [number, number] = [element.x + step[0], element.y + step[1]];
-      
-      // 注意：修正了之前的越界判断 (由于原先代码仅判 x*y >= 0 会导致 x=10, y=1 这样 y 通过但实际无效的情况)
+
       while (x >= 0 && x < this.size && y >= 0 && y < this.size) {
         const cell: gc.GridCell = this.grid[y][x];
 
