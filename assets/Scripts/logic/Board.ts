@@ -32,7 +32,13 @@ export class Board {
   }
 
   // 清空光路防止残留
-  clearRayPath() { }
+  clearRayPath() {
+    for (let y = 0; y < this.size; y++) {
+      for (let x = 0; x < this.size; x++) {
+        this.grid[y][x].rays.length = 0;
+      }
+    }
+  }
 
   // 光路渲染
   render() {

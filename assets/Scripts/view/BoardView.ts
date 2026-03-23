@@ -62,7 +62,8 @@ export class BoardView extends Component {
         // 绘制背景网格
         this.drawGrid();
 
-        // 逻辑渲染
+        // 逻辑渲染前，必须清空上一帧残留的光线数据！
+        this.board.clearRayPath();
         this.board.render();
 
         // 绘制
