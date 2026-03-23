@@ -3,18 +3,22 @@ import { Board } from '../logic/Board';
 import * as gc from '../logic/GridCell';
 const { ccclass, property } = _decorator;
 
-export const LampColors = {
-    // 亮灯颜色
-    RED_ON: new Color(255, 60, 60, 255),
-    GREEN_ON: new Color(60, 255, 80, 255),
-    BLUE_ON: new Color(60, 120, 255, 255),
-    WHITE_ON: new Color(255, 255, 255, 255),
+export const UIColors = {
+    RED_LIGHT: new Color(255, 60, 60, 255),
+    GREEN_LIGHT: new Color(60, 255, 80, 255),
+    BLUE_LIGHT: new Color(60, 120, 255, 255),
+    YELLOW_LIGHT: new Color(255, 255, 60, 255),
+    CYAN_LIGHT: new Color(60, 255, 255, 255),
+    MAGENTA_LIGHT: new Color(255, 60, 255, 255),
+    WHITE_LIGHT: new Color(255, 255, 255, 255),
 
-    // 熄灯颜色
-    RED_OFF: new Color(50, 10, 10, 255),
-    GREEN_OFF: new Color(10, 50, 15, 255),
-    BLUE_OFF: new Color(10, 25, 60, 255),
-    WHITE_OFF: new Color(60, 60, 60, 255)
+    RED_DARK: new Color(50, 10, 10, 255),
+    GREEN_DARK: new Color(10, 50, 15, 255),
+    BLUE_DARK: new Color(10, 25, 60, 255),
+    YELLOW_DARK: new Color(50, 50, 10, 255),
+    CYAN_DARK: new Color(10, 50, 50, 255),
+    MAGENTA_DARK: new Color(50, 10, 50, 255),
+    WHITE_DARK: new Color(60, 60, 60, 255)
 };
 
 @ccclass('BoardView')
@@ -43,6 +47,7 @@ export class BoardView extends Component {
     }
 
     update(dt: number): void {
+        // 绘制背景网格
         this.drawGrid();
 
         // 逻辑渲染
@@ -51,9 +56,22 @@ export class BoardView extends Component {
         // 绘制
         this.board.grid.forEach((row: gc.GridCell[], idxRow: number) => {
             row.forEach((cell: gc.GridCell, idxColum: number) => {
-                // 绘制光线
+                // 小灯在最底层，所以小灯最先画
+                if (cell.item && cell.item.type === gc.IdLittleLight) {
+                    const littleLight = cell.item as gc.LittleLight;
+                    const uiColor = this.getUIColor(littleLight.color, littleLight.on);
+                    this.drawCircle(idxColum, idxRow, uiColor);
+                }
+
+                // 绘制光线（盖在小灯的上方，但在极光发射器、镜子等道具下方）
                 cell.rays.forEach((ray: gc.Ray) => {
-                    this.drawRayInCell(idxColum, idxRow, ray.direction, LampColors.RED_ON);
+                    const uiColor = this.getUIColor(ray.color, true);
+                    // 顺沿方向的半条光线
+                    this.drawRayInCell(idxColum, idxRow, ray.direction, uiColor);
+
+                    // 反方向的另半条光线，使光线贯穿整个格子
+                    const oppositeDir = (ray.direction + 8) % 16 as gc.Direction;
+                    this.drawRayInCell(idxColum, idxRow, oppositeDir, uiColor);
                 });
 
                 // 绘制道具
@@ -63,20 +81,9 @@ export class BoardView extends Component {
                 switch (cell.item.type) {
                     case gc.IdRaySource:
                         const raySource = cell.item as gc.RaySource;
+                        this.drawRayInCell(idxColum, idxRow, raySource.direction, UIColors.RED_LIGHT);
                         this.setNodeToCell(this.raySourceRed, idxColum, idxRow);
                         this.raySourceRed.active = true;
-                        break;
-                    case gc.IdLittleLight:
-                        const littleLight = cell.item as gc.LittleLight;
-                        if (littleLight.on) {
-                            this.drawCircle(idxColum, idxRow, LampColors.RED_ON);
-                        } else {
-                            this.drawCircle(idxColum, idxRow, LampColors.RED_OFF);
-                        }
-                        // 再绘制一次光线，保证光线在灯的上面
-                        cell.rays.forEach((ray: gc.Ray) => {
-                            this.drawRayInCell(idxColum, idxRow, ray.direction, LampColors.GREEN_ON);
-                        });
                         break;
                     case gc.IdReflector45:
                         break;
@@ -84,7 +91,7 @@ export class BoardView extends Component {
                         break;
                 }
             })
-        })
+        });
     }
 
     private drawGrid() {
@@ -123,6 +130,20 @@ export class BoardView extends Component {
         }
 
         g.stroke();
+    }
+
+    /**
+     * 将逻辑层的 Color 转换为 UI 渲染用的 cc.Color
+     */
+    private getUIColor(logicColor: gc.Color, isLight: boolean): Color {
+        if (logicColor.equals(gc.Color.Red)) return isLight ? UIColors.RED_LIGHT : UIColors.RED_DARK;
+        if (logicColor.equals(gc.Color.Green)) return isLight ? UIColors.GREEN_LIGHT : UIColors.GREEN_DARK;
+        if (logicColor.equals(gc.Color.Blue)) return isLight ? UIColors.BLUE_LIGHT : UIColors.BLUE_DARK;
+        if (logicColor.equals(gc.Color.Yellow)) return isLight ? UIColors.YELLOW_LIGHT : UIColors.YELLOW_DARK;
+        if (logicColor.equals(gc.Color.Cyan)) return isLight ? UIColors.CYAN_LIGHT : UIColors.CYAN_DARK;
+        if (logicColor.equals(gc.Color.Magenta)) return isLight ? UIColors.MAGENTA_LIGHT : UIColors.MAGENTA_DARK;
+
+        return isLight ? UIColors.WHITE_LIGHT : UIColors.WHITE_DARK;
     }
 
     /**
