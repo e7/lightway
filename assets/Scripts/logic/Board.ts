@@ -63,8 +63,14 @@ export class Board {
         cell.rays.push({ direction: rayDire, color: rayColor });
 
         // 渲染道具
+        let shouldStopRay = false;
         if (cell.item !== null) {
           switch (cell.item.type) {
+            case gc.IdRaySource:
+              // 光源实体具有物理限制，相当于一堵墙，打到它时光线立即终止被阻挡
+              shouldStopRay = true;
+              break;
+
             case gc.IdLittleLight:
               const littleLight = cell.item as gc.LittleLight;
               const mixedColor = cell.rays.reduce(
@@ -81,6 +87,10 @@ export class Board {
               rayDire = reflectAngle(rayDire, reflector.direction);
               break;
           }
+        }
+
+        if (shouldStopRay) {
+          break; // 中断光线传播
         }
 
         // next cell

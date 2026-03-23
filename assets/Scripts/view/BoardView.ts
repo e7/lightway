@@ -1,4 +1,4 @@
-import { _decorator, Component, Graphics, Color, UITransform, Node, Sprite, SpriteFrame, v3 } from 'cc';
+import { _decorator, Component, Graphics, Color, UITransform, Node, Sprite, SpriteFrame, v3, instantiate } from 'cc';
 import { Board } from '../logic/Board';
 import * as gc from '../logic/GridCell';
 const { ccclass, property } = _decorator;
@@ -33,12 +33,23 @@ export class BoardView extends Component {
 
     private raySourceRed: Node | null = null;
 
+    // 增加一个字典：核心道具对象 -> 对应的UI节点，防止每帧重复克隆
+    private itemNodeMap: Map<gc.Item, Node> = new Map();
+
     start() {
         this.graphics = this.getComponent(Graphics);
         this.raySourceRed = this.node.getChildByName("RaySourceRed");
+        if (!this.raySourceRed) {
+            throw new Error("BoardView: Missing 'RaySourceRed' child node!");
+        }
+
+        // 把它隐藏起来专门用作“克隆模板”
+        this.raySourceRed.active = false;
+
         this.board = new Board(this.gridSize);
         this.board.load({
             staticItems: [
+                { x: 7, y: 10, item: { type: gc.IdRaySource, direction: gc.Dir0, color: gc.Color.Red } as gc.RaySource },
                 { x: 7, y: 4, item: { type: gc.IdRaySource, direction: gc.DirPI_2, color: gc.Color.Red } as gc.RaySource },
                 { x: 7, y: 7, item: { type: gc.IdLittleLight, color: gc.Color.Red, on: false } as gc.LittleLight },
                 { x: 5, y: 3, item: { type: gc.IdLittleLight, color: gc.Color.Green, on: false } as gc.LittleLight },
@@ -67,10 +78,16 @@ export class BoardView extends Component {
                 // 绘制光线（盖在小灯的上方，但在极光发射器、镜子等道具下方）
                 cell.rays.forEach((ray: gc.Ray) => {
                     const uiColor = this.getUIColor(ray.color, true);
-                    // 顺沿方向的半条光线
-                    this.drawRayInCell(idxColum, idxRow, ray.direction, uiColor);
 
-                    // 反方向的另半条光线，使光线贯穿整个格子
+                    // 判断光线是否在这个格子被物理阻挡（比如撞到了实体光源、未来的墙壁等）
+                    const isBlocked = cell.item && (cell.item.type === gc.IdRaySource);
+
+                    // 如果没有被阻挡（空地、小灯泡），才需要画顺沿方向的半条出射光线
+                    if (!isBlocked) {
+                        this.drawRayInCell(idxColum, idxRow, ray.direction, uiColor);
+                    }
+
+                    // 反方向的另半条光线，代表光线是“穿入”这个格子的（入射光线必然存在）
                     const oppositeDir = (ray.direction + 8) % 16 as gc.Direction;
                     this.drawRayInCell(idxColum, idxRow, oppositeDir, uiColor);
                 });
@@ -82,9 +99,21 @@ export class BoardView extends Component {
                 switch (cell.item.type) {
                     case gc.IdRaySource:
                         const raySource = cell.item as gc.RaySource;
-                        this.drawRayInCell(idxColum, idxRow, raySource.direction, UIColors.RED_LIGHT);
-                        this.setNodeToCell(this.raySourceRed, idxColum, idxRow);
-                        this.raySourceRed.active = true;
+                        this.drawRayInCell(idxColum, idxRow, raySource.direction, this.getUIColor(raySource.color, true));
+
+                        // 动态克隆节点逻辑
+                        let srcNode = this.itemNodeMap.get(cell.item);
+                        if (!srcNode) {
+                            // 第1帧发现字典里没有它：从模板克隆出一个新的实体
+                            srcNode = instantiate(this.raySourceRed!);
+                            srcNode.active = true;
+                            // 挂载到父节点才会真正显示出该模板
+                            this.node.addChild(srcNode);
+                            this.itemNodeMap.set(cell.item, srcNode);
+                        }
+
+                        this.setNodeToCell(srcNode, idxColum, idxRow);
+                        srcNode.angle = raySource.direction * 22.5;
                         break;
                     case gc.IdReflector45:
                         break;
