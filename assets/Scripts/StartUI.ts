@@ -12,7 +12,7 @@ export class StartUI extends Component {
     }
 
     public onStartButtonClicked() {
-        director.loadScene("02-GameScene")
+        director.loadScene("Lightway")
     }
 }
 
