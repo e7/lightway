@@ -41,6 +41,7 @@ export class BoardView extends Component {
             staticItems: [
                 { x: 7, y: 4, item: { type: gc.IdRaySource, direction: gc.DirPI_2, color: gc.Color.Red } as gc.RaySource },
                 { x: 7, y: 7, item: { type: gc.IdLittleLight, color: gc.Color.Red, on: false } as gc.LittleLight },
+                { x: 5, y: 3, item: { type: gc.IdLittleLight, color: gc.Color.Green, on: false } as gc.LittleLight },
             ],
             items: [],
         });
