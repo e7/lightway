@@ -126,14 +126,16 @@ export class Color {
 }
 
 // 道具类型
-export const IdRaySource = 'RaySource' as const;
+export const IdRaySource = 'RaySource' as const;  // 光源
 type _RaySource = typeof IdRaySource;
-export const IdLittleLight = 'LittleLight' as const;
+export const IdLittleLight = 'LittleLight' as const;  // 小灯
 type _LittleLight = typeof IdLittleLight;
-export const IdReflector45 = 'Reflector45' as const;
+export const IdReflector45 = 'Reflector45' as const;   // 反射镜，反射角45度
 type _Reflector45 = typeof IdReflector45;
-export const IdReflector90 = 'Reflector90' as const;
+export const IdReflector90 = 'Reflector90' as const;   // 反射镜，反射角90度
 type _Reflector90 = typeof IdReflector90;
+export const IdGlassReflector = 'GlassReflector' as const; // 玻璃镜，同时具有反射（90度）和透射功能
+type _GlassReflector = typeof IdGlassReflector;
 
 export interface RaySource {
   readonly type: _RaySource;
@@ -170,8 +172,13 @@ export interface Reflector90 {
   direction: Direction;
 }
 
+export interface GlassReflector {
+  type: _GlassReflector;
+  direction: Direction;
+}
+
 // 道具
-export type Item = RaySource | LittleLight | Reflector45 | Reflector90;
+export type Item = RaySource | LittleLight | Reflector45 | Reflector90 | GlassReflector;
 
 export interface Ray {
   direction: Direction;

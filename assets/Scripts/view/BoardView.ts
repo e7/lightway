@@ -1,6 +1,7 @@
 import { _decorator, Component, Graphics, Color, UITransform, Node, Sprite, SpriteFrame, v3, instantiate } from 'cc';
 import { Board } from '../logic/Board';
 import * as gc from '../logic/GridCell';
+import { reflectAngle } from '../logic/Reflect';
 const { ccclass, property } = _decorator;
 
 export const UIColors = {
@@ -31,26 +32,30 @@ export class BoardView extends Component {
     private readonly gridSize = 15;
     private readonly cellSize = 48;
 
-    private raySourceRed: Node | null = null;
+    private raySourceRed: Node;
+    private reflector90: Node;
 
     // 增加一个字典：核心道具对象 -> 对应的UI节点，防止每帧重复克隆
     private itemNodeMap: Map<gc.Item, Node> = new Map();
 
     start() {
         this.graphics = this.getComponent(Graphics);
+
+        // 获取道具模板
         this.raySourceRed = this.node.getChildByName("RaySourceRed");
         if (!this.raySourceRed) {
             throw new Error("BoardView: Missing 'RaySourceRed' child node!");
         }
-
-        // 把它隐藏起来专门用作“克隆模板”
-        this.raySourceRed.active = false;
+        this.reflector90 = this.node.getChildByName("Reflector90");
+        if (!this.reflector90) {
+            throw new Error("BoardView: Missing 'Reflector90' child node!");
+        }
 
         this.board = new Board(this.gridSize);
         this.board.load({
             staticItems: [
-                { x: 7, y: 10, item: { type: gc.IdRaySource, direction: gc.Dir0, color: gc.Color.Red } as gc.RaySource },
-                { x: 7, y: 4, item: { type: gc.IdRaySource, direction: gc.DirPI_2, color: gc.Color.Red } as gc.RaySource },
+                { x: 3, y: 10, item: { type: gc.IdRaySource, direction: gc.Dir0, color: gc.Color.Red } as gc.RaySource },
+                { x: 7, y: 10, item: { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90 },
                 { x: 7, y: 7, item: { type: gc.IdLittleLight, color: gc.Color.Red, on: false } as gc.LittleLight },
                 { x: 5, y: 3, item: { type: gc.IdLittleLight, color: gc.Color.Green, on: false } as gc.LittleLight },
             ],
@@ -80,10 +85,16 @@ export class BoardView extends Component {
                 cell.rays.forEach((ray: gc.Ray) => {
                     const uiColor = this.getUIColor(ray.color, true);
 
-                    // 判断光线是否在这个格子被物理阻挡（比如撞到了实体光源、未来的墙壁等）
-                    const isBlocked = cell.item && (cell.item.type === gc.IdRaySource);
+                    // 判断光线是否在这个格子被物理阻挡
+                    let isBlocked = false;
+                    if (cell.item) {
+                        const type = cell.item.type;
+                        // 光源会阻挡；反射镜改变了方向，也会阻挡顺延方向的绘制
+                        isBlocked = (type === gc.IdRaySource || type === gc.IdReflector45 || type === gc.IdReflector90);
+                        // 其它如 空地、小灯泡(LittleLight)、玻璃(GlassReflector) 不会阻挡
+                    }
 
-                    // 如果没有被阻挡（空地、小灯泡），才需要画顺沿方向的半条出射光线
+                    // 如果没有被阻挡，才需要画顺沿方向的半条出射光线
                     if (!isBlocked) {
                         this.drawRayInCell(idxColum, idxRow, ray.direction, uiColor);
                     }
@@ -116,10 +127,56 @@ export class BoardView extends Component {
                         this.setNodeToCell(srcNode, idxColum, idxRow);
                         srcNode.angle = raySource.direction * 22.5;
                         break;
-                    case gc.IdReflector45:
+                    case gc.IdReflector45: {
+                        const reflector45 = cell.item as gc.Reflector45;
+                        cell.rays.forEach((ray: gc.Ray) => {
+                            const refDir = reflectAngle(ray.direction, reflector45.direction);
+                            this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(ray.color, true));
+                        });
                         break;
-                    case gc.IdReflector90:
+                    }
+                    case gc.IdReflector90: {
+                        const reflector90 = cell.item as gc.Reflector90;
+                        cell.rays.forEach((ray: gc.Ray) => {
+                            const allowedRays = [
+                                (reflector90.direction + 6) % 16,
+                                (reflector90.direction + 8) % 16,
+                                (reflector90.direction + 10) % 16
+                            ];
+                            if (allowedRays.indexOf(ray.direction) !== -1) {
+                                const refDir = reflectAngle(ray.direction, reflector90.direction);
+                                this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(ray.color, true));
+                            }
+                        });
+
+                        let ref90Node = this.itemNodeMap.get(cell.item);
+                        if (!ref90Node) {
+                            ref90Node = instantiate(this.reflector90!);
+                            ref90Node.active = true;
+                            this.node.addChild(ref90Node);
+                            this.itemNodeMap.set(cell.item, ref90Node);
+                        }
+                        this.setNodeToCell(ref90Node, idxColum, idxRow);
+                        ref90Node.angle = reflector90.direction * 22.5;
                         break;
+                    }
+                    case gc.IdGlassReflector: {
+                        const glass = cell.item as gc.GlassReflector;
+                        cell.rays.forEach((ray: gc.Ray) => {
+                            const allowedRays = [
+                                (glass.direction + 6) % 16,
+                                (glass.direction + 8) % 16,
+                                (glass.direction + 10) % 16
+                            ];
+                            // 玻璃镜透射的前半截在上方(因为没被阻挡)已经绘制，这里只需补充反射产生的侧面半截光线
+                            if (allowedRays.indexOf(ray.direction) !== -1) {
+                                const refDir = reflectAngle(ray.direction, glass.direction);
+                                this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(ray.color, true));
+                            }
+                        });
+                        // todo: 可以复用实例化 GlassReflector 节点相关代码，和 Reflector90 一样
+                        break;
+                    }
                 }
             })
         });
