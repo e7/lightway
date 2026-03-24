@@ -99,7 +99,7 @@ export class Color {
   }
 
   /**
-   * 内部：把二进制值转回对应颜色对象
+   * 把二进制值转回对应颜色对象
    */
   private static fromValue(value: number): Color {
     switch (value) {

@@ -38,6 +38,12 @@ export class BoardView extends Component {
     // 增加一个字典：核心道具对象 -> 对应的UI节点，防止每帧重复克隆
     private itemNodeMap: Map<gc.Item, Node> = new Map();
 
+    private draggedItem: gc.Item | null = null;
+    private draggedNode: Node | null = null;
+    private dragStartCol: number = -1;
+    private dragStartRow: number = -1;
+    private dragHasMoved: boolean = false;
+
     start() {
         this.graphics = this.getComponent(Graphics);
 
@@ -62,16 +68,17 @@ export class BoardView extends Component {
             items: [],
         });
 
-        // 注册触摸/点击事件监听，用于道具交互（如旋转反射镜）
+        // 注册触摸/滑动事件监听，用于道具拖拽与旋转
+        this.node.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
+        this.node.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+        this.node.on(Node.EventType.TOUCH_CANCEL, this.onTouchCancel, this);
     }
 
-    private onTouchEnd(event: EventTouch) {
-        if (!this.board) return;
-
+    private getGridCoordFromTouch(event: EventTouch) {
         const touchPos = event.getUILocation();
         const uiTransform = this.getComponent(UITransform);
-        if (!uiTransform) return;
+        if (!uiTransform) return null;
 
         // 转换到节点局部中心坐标
         const nodePos = uiTransform.convertToNodeSpaceAR(v3(touchPos.x, touchPos.y, 0));
@@ -90,14 +97,90 @@ export class BoardView extends Component {
         const col = Math.floor(localX / this.cellSize);
         const row = Math.floor(localY / this.cellSize);
 
+        return { col, row, nodePos };
+    }
+
+    private onTouchStart(event: EventTouch) {
+        if (!this.board) return;
+        const coord = this.getGridCoordFromTouch(event);
+        if (!coord) return;
+        const { col, row } = coord;
+
+        this.dragHasMoved = false;
+
         if (col >= 0 && col < this.gridSize && row >= 0 && row < this.gridSize) {
             const cell = this.board.grid[row][col];
-            if (cell && cell.item && cell.item.type === gc.IdReflector90) {
-                const reflector = cell.item as gc.Reflector90;
-                // 逆时针旋转PI/4 (即方向索引增加 2， 1个单位是PI/8)
-                reflector.direction = (reflector.direction + 2) % 16 as gc.Direction;
+            if (cell && cell.item) {
+                const type = cell.item.type;
+                // 只有镜子类是可移动的，小灯和光源锁定不可拖动
+                if (type === gc.IdReflector90 || type === gc.IdReflector45 || type === gc.IdGlassReflector) {
+                    this.draggedItem = cell.item;
+                    this.draggedNode = this.itemNodeMap.get(cell.item) || null;
+                    this.dragStartCol = col;
+                    this.dragStartRow = row;
+                }
             }
         }
+    }
+
+    private onTouchMove(event: EventTouch) {
+        if (!this.draggedNode) return;
+        const delta = event.getDelta();
+        if (delta.x * delta.x + delta.y * delta.y > 9) {
+            this.dragHasMoved = true;
+        }
+
+        const coord = this.getGridCoordFromTouch(event);
+        if (coord) {
+            // 跟随鼠标/手指移动
+            this.draggedNode.setPosition(coord.nodePos);
+        }
+    }
+
+    private onTouchEnd(event: EventTouch) {
+        this.handleTouchDrop(event);
+    }
+
+    private onTouchCancel(event: EventTouch) {
+        this.handleTouchDrop(event);
+    }
+
+    private handleTouchDrop(event: EventTouch) {
+        if (!this.board || !this.draggedItem) return;
+
+        const coord = this.getGridCoordFromTouch(event);
+        if (!coord) return;
+        const { col, row } = coord;
+
+        let placedCol = this.dragStartCol;
+        let placedRow = this.dragStartRow;
+
+        if (this.dragHasMoved) {
+            // 根据拖拽落点所在的格子判断
+            if (col >= 0 && col < this.gridSize && row >= 0 && row < this.gridSize) {
+                const targetCell = this.board.grid[row][col];
+                // 如果目标网格为空地，就可以放置
+                if (targetCell.item === null) {
+                    placedCol = col;
+                    placedRow = row;
+                }
+            }
+        } else {
+            // 没有发生拖拽位移，视作“点击”来旋转道具
+            const ref = this.draggedItem as any;
+            if (typeof ref.direction !== 'undefined') {
+                ref.direction = (ref.direction + 2) % 16 as gc.Direction;
+            }
+        }
+
+        // 先把原格子置空
+        this.board.grid[this.dragStartRow][this.dragStartCol].item = null;
+        // 把道具放回棋盘指定的格子里
+        this.board.grid[placedRow][placedCol].item = this.draggedItem;
+
+        // 结束拖拽清理引用
+        this.draggedItem = null;
+        this.draggedNode = null;
     }
 
     update(dt: number): void {
@@ -193,8 +276,12 @@ export class BoardView extends Component {
                             this.node.addChild(ref90Node);
                             this.itemNodeMap.set(cell.item, ref90Node);
                         }
-                        this.setNodeToCell(ref90Node, idxColum, idxRow);
-                        ref90Node.angle = reflector90.direction * 22.5;
+
+                        // 如果这个道具正在被拖拽，将不会强制锁定到网格中心，从而让 `onTouchMove` 控制其跟随手指
+                        if (this.draggedItem !== cell.item) {
+                            this.setNodeToCell(ref90Node, idxColum, idxRow);
+                            ref90Node.angle = reflector90.direction * 22.5;
+                        }
                         break;
                     }
                     case gc.IdGlassReflector: {
