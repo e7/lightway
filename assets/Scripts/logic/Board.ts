@@ -31,11 +31,17 @@ export class Board {
     });
   }
 
-  // 清空光路防止残留
+  // 清空光路及灯光状态防止残留
   clearRayPath() {
     for (let y = 0; y < this.size; y++) {
       for (let x = 0; x < this.size; x++) {
-        this.grid[y][x].rays.length = 0;
+        const cell = this.grid[y][x];
+        cell.rays.length = 0;
+
+        // 每帧重置小灯状态，如果这帧光线真的经过它，会在 render() 里被重新点亮
+        if (cell.item !== null && cell.item.type === gc.IdLittleLight) {
+          (cell.item as gc.LittleLight).on = false;
+        }
       }
     }
   }

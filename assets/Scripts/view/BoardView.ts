@@ -1,4 +1,4 @@
-import { _decorator, Component, Graphics, Color, UITransform, Node, Sprite, SpriteFrame, v3, instantiate } from 'cc';
+import { _decorator, Component, Graphics, Color, UITransform, Node, Sprite, SpriteFrame, v3, instantiate, EventTouch } from 'cc';
 import { Board } from '../logic/Board';
 import * as gc from '../logic/GridCell';
 import { reflectAngle } from '../logic/Reflect';
@@ -61,6 +61,43 @@ export class BoardView extends Component {
             ],
             items: [],
         });
+
+        // 注册触摸/点击事件监听，用于道具交互（如旋转反射镜）
+        this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+    }
+
+    private onTouchEnd(event: EventTouch) {
+        if (!this.board) return;
+
+        const touchPos = event.getUILocation();
+        const uiTransform = this.getComponent(UITransform);
+        if (!uiTransform) return;
+
+        // 转换到节点局部中心坐标
+        const nodePos = uiTransform.convertToNodeSpaceAR(v3(touchPos.x, touchPos.y, 0));
+
+        const boardWidth = this.gridSize * this.cellSize;
+        const boardHeight = this.gridSize * this.cellSize;
+        const anchorX = uiTransform.anchorX;
+        const anchorY = uiTransform.anchorY;
+
+        const startX = -boardWidth * anchorX;
+        const startY = -boardHeight * anchorY;
+
+        const localX = nodePos.x - startX;
+        const localY = nodePos.y - startY;
+
+        const col = Math.floor(localX / this.cellSize);
+        const row = Math.floor(localY / this.cellSize);
+
+        if (col >= 0 && col < this.gridSize && row >= 0 && row < this.gridSize) {
+            const cell = this.board.grid[row][col];
+            if (cell && cell.item && cell.item.type === gc.IdReflector90) {
+                const reflector = cell.item as gc.Reflector90;
+                // 逆时针旋转PI/4 (即方向索引增加 2， 1个单位是PI/8)
+                reflector.direction = (reflector.direction + 2) % 16 as gc.Direction;
+            }
+        }
     }
 
     update(dt: number): void {
