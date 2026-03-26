@@ -13,13 +13,13 @@ export const UIColors = {
     MAGENTA_LIGHT: new Color(255, 60, 255, 255),
     WHITE_LIGHT: new Color(255, 255, 255, 255),
 
-    RED_DARK: new Color(50, 10, 10, 255),
-    GREEN_DARK: new Color(10, 50, 15, 255),
-    BLUE_DARK: new Color(10, 25, 60, 255),
-    YELLOW_DARK: new Color(50, 50, 10, 255),
-    CYAN_DARK: new Color(10, 50, 50, 255),
-    MAGENTA_DARK: new Color(50, 10, 50, 255),
-    WHITE_DARK: new Color(60, 60, 60, 255)
+    RED_DARK: new Color(90, 30, 30, 255),
+    GREEN_DARK: new Color(30, 90, 40, 255),
+    BLUE_DARK: new Color(30, 50, 100, 255),
+    YELLOW_DARK: new Color(90, 90, 30, 255),
+    CYAN_DARK: new Color(30, 90, 90, 255),
+    MAGENTA_DARK: new Color(90, 30, 90, 255),
+    WHITE_DARK: new Color(100, 100, 100, 255)
 };
 
 @ccclass('BoardView')
@@ -33,6 +33,7 @@ export class BoardView extends Component {
     private readonly cellSize = 48;
 
     private raySourceRed: Node;
+    private raySourceBlue: Node;
     private reflector90: Node;
 
     // 增加一个字典：核心道具对象 -> 对应的UI节点，防止每帧重复克隆
@@ -52,6 +53,10 @@ export class BoardView extends Component {
         if (!this.raySourceRed) {
             throw new Error("BoardView: Missing 'RaySourceRed' child node!");
         }
+        this.raySourceBlue = this.node.getChildByName("RaySourceBlue");
+        if (!this.raySourceBlue) {
+            throw new Error("BoardView: Missing 'RaySourceBlue' child node!");
+        }
         this.reflector90 = this.node.getChildByName("Reflector90");
         if (!this.reflector90) {
             throw new Error("BoardView: Missing 'Reflector90' child node!");
@@ -60,10 +65,15 @@ export class BoardView extends Component {
         this.board = new Board(this.gridSize);
         this.board.load({
             staticItems: [
-                { x: 3, y: 10, item: { type: gc.IdRaySource, direction: gc.Dir0, color: gc.Color.Red } as gc.RaySource },
-                { x: 7, y: 10, item: { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90 },
-                { x: 7, y: 7, item: { type: gc.IdLittleLight, color: gc.Color.Red, on: false } as gc.LittleLight },
-                { x: 5, y: 3, item: { type: gc.IdLittleLight, color: gc.Color.Green, on: false } as gc.LittleLight },
+                { x: 0, y: 11, item: { type: gc.IdRaySource, direction: gc.Dir7PI_4, color: gc.Color.Blue } as gc.RaySource },
+                { x: 3, y: 0, item: { type: gc.IdRaySource, direction: gc.DirPI_4, color: gc.Color.Green } as gc.RaySource },
+                { x: 14, y: 3, item: { type: gc.IdRaySource, direction: gc.DirPI, color: gc.Color.Red } as gc.RaySource },
+                { x: 7, y: 6, item: { type: gc.IdLittleLight, color: gc.Color.Magenta, on: false } as gc.LittleLight },
+                { x: 9, y: 8, item: { type: gc.IdLittleLight, color: gc.Color.Cyan, on: false } as gc.LittleLight },
+                { x: 7, y: 10, item: { type: gc.IdLittleLight, color: gc.Color.Yellow, on: false } as gc.LittleLight },
+                { x: 10, y: 1, item: { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90 },
+                { x: 10, y: 2, item: { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90 },
+                { x: 9, y: 2, item: { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90 },
             ],
             items: [],
         });
@@ -116,6 +126,10 @@ export class BoardView extends Component {
                 if (type === gc.IdReflector90 || type === gc.IdReflector45 || type === gc.IdGlassReflector) {
                     this.draggedItem = cell.item;
                     this.draggedNode = this.itemNodeMap.get(cell.item) || null;
+                    if (this.draggedNode) {
+                        // 拖拽时提到最上层
+                        this.draggedNode.setSiblingIndex(this.node.children.length - 1);
+                    }
                     this.dragStartCol = col;
                     this.dragStartRow = row;
                 }
@@ -237,7 +251,21 @@ export class BoardView extends Component {
                         let srcNode = this.itemNodeMap.get(cell.item);
                         if (!srcNode) {
                             // 第1帧发现字典里没有它：从模板克隆出一个新的实体
-                            srcNode = instantiate(this.raySourceRed!);
+                            let templateName = "RaySourceWhite";
+                            if (raySource.color.equals(gc.Color.Red)) templateName = "RaySourceRed";
+                            else if (raySource.color.equals(gc.Color.Green)) templateName = "RaySourceGreen";
+                            else if (raySource.color.equals(gc.Color.Blue)) templateName = "RaySourceBlue";
+                            else if (raySource.color.equals(gc.Color.Yellow)) templateName = "RaySourceYellow";
+                            else if (raySource.color.equals(gc.Color.Cyan)) templateName = "RaySourceCyan";
+                            else if (raySource.color.equals(gc.Color.Magenta)) templateName = "RaySourceMagenta";
+
+                            let templateNode = this.node.getChildByName(templateName);
+                            if (!templateNode) {
+                                console.warn(`BoardView: Missing '${templateName}' fallback to RaySourceRed`);
+                                templateNode = this.raySourceRed; // 后备方案
+                            }
+
+                            srcNode = instantiate(templateNode!);
                             srcNode.active = true;
                             // 挂载到父节点才会真正显示出该模板
                             this.node.addChild(srcNode);
@@ -308,11 +336,8 @@ export class BoardView extends Component {
 
     private drawGrid() {
         const g = this.graphics;
+        if (!g) return;
         g.clear();
-
-        // 设置线条均为 2 像素
-        g.lineWidth = 2;
-        g.strokeColor = new Color(255, 255, 255, 120);
 
         const boardWidth = this.gridSize * this.cellSize;   // 15 * 48 = 720
         const boardHeight = this.gridSize * this.cellSize;  // 15 * 48 = 720
@@ -324,6 +349,15 @@ export class BoardView extends Component {
 
         const startX = -boardWidth * anchorX;
         const startY = -boardHeight * anchorY;
+
+        // 1. 绘制带有区分度的深色背景底板，采用中性暗灰色(Dark Gray)，避免和所有霓虹色发生冲突，特别是蓝色
+        g.fillColor = new Color(20, 24, 38, 255);
+        g.rect(startX, startY, boardWidth, boardHeight);
+        g.fill();
+
+        // 2. 设置网格线
+        g.lineWidth = 2;
+        g.strokeColor = new Color(255, 255, 255, 80);
 
         // 画 16 条垂直线 (i=0 和 i=15 就是左右外框边缘)
         for (let i = 0; i <= this.gridSize; i++) {

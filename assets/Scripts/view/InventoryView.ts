@@ -20,10 +20,6 @@ export class InventoryView extends Component {
         const g = this.graphics;
         g.clear();
 
-        // 设置线条均为 2 像素，颜色和主棋盘保持一致
-        g.lineWidth = 2;
-        g.strokeColor = new Color(255, 255, 255, 120);
-
         const boardWidth = this.cols * this.cellSize;   // 15 * 48 = 720
         const boardHeight = this.rows * this.cellSize;  // 2 * 48 = 96
 
@@ -35,7 +31,16 @@ export class InventoryView extends Component {
         const startX = -boardWidth * anchorX;
         const startY = -boardHeight * anchorY;
 
-        // 画 16 条垂直线 (i=0 到 i=15 为边缘及内部线)
+        // 1. 绘制带有区分度的深色背景底板，保持与主棋盘的色调统一
+        g.fillColor = new Color(20, 24, 38, 255);
+        g.rect(startX, startY, boardWidth, boardHeight);
+        g.fill();
+
+        // 2. 设置线条均为 2 像素，颜色和主棋盘保持一致
+        g.lineWidth = 2;
+        g.strokeColor = new Color(255, 255, 255, 80);
+
+        // 画垂直线 (i=0 到 i=cols)
         for (let i = 0; i <= this.cols; i++) {
             let x = startX + i * this.cellSize;
             g.moveTo(x, startY);
