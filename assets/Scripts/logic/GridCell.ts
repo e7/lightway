@@ -189,8 +189,23 @@ export class GridCell {
   item: Nullable<Item>;
   rays: Ray[]; // 各个角度的入射光线
 
+  /**
+   * 显式存储从中心点出发的 16 个方向的半截光线颜色。
+   * 这使得渲染层可以直接遍历并绘制，无需关心逻辑复杂的反射/透射/阻挡规则。
+   */
+  halfColors: Color[];
+
   constructor() {
     this.item = null;
     this.rays = [];
+    this.halfColors = new Array(16).fill(Color.Black);
+  }
+
+  /**
+   * 重置格子光路状态
+   */
+  resetRayState() {
+    this.rays.length = 0;
+    this.halfColors.fill(Color.Black);
   }
 }

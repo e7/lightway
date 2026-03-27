@@ -1,7 +1,6 @@
 import { _decorator, Component, Graphics, Color, UITransform, Node, Sprite, SpriteFrame, v3, instantiate, EventTouch, Vec2, director, Canvas } from 'cc';
 import { Board } from '../logic/Board';
 import * as gc from '../logic/GridCell';
-import { reflectAngle } from '../logic/Reflect';
 import { ItemNodeFactory } from './ItemNodeFactory';
 const { ccclass, property } = _decorator;
 
@@ -254,25 +253,13 @@ export class BoardView extends Component {
                 }
 
                 // 绘制光线（盖在小灯的上方，但在极光发射器、镜子等道具下方）
-                cell.rays.forEach((ray: gc.Ray) => {
-                    const uiColor = this.getUIColor(ray.color, true);
-
-                    // 判断光线是否在这个格子被物理阻挡
-                    let isBlocked = false;
-                    if (cell.item) {
-                        const type = cell.item.type;
-                        isBlocked = (type === gc.IdRaySource || type === gc.IdReflector45 || type === gc.IdReflector90);
+                // 采用纯数据驱动：直接遍历 halfColors 数组进行绘制
+                for (let d = 0; d < 16; d++) {
+                    const color = cell.halfColors[d];
+                    if (color && !color.equals(gc.Color.Black)) {
+                        this.drawRayInCell(idxColum, idxRow, d as gc.Direction, this.getUIColor(color, true));
                     }
-
-                    // 如果没有被阻挡，画顺沿方向的半条出射光线
-                    if (!isBlocked) {
-                        this.drawRayInCell(idxColum, idxRow, ray.direction, uiColor);
-                    }
-
-                    // 反方向的另半条光线，代表光线是"穿入"这个格子的
-                    const oppositeDir = (ray.direction + 8) % 16 as gc.Direction;
-                    this.drawRayInCell(idxColum, idxRow, oppositeDir, uiColor);
-                });
+                }
 
                 // 绘制道具
                 if (cell.item === null) {
@@ -281,21 +268,6 @@ export class BoardView extends Component {
                 switch (cell.item.type) {
                     case gc.IdRaySource:
                         const raySource = cell.item as gc.RaySource;
-
-                        // 从光线路径的第一个格子获取回传后的混色，而非使用光源原色
-                        // 这样当两束光线对射混色时，光源格子也能显示正确的混合色
-                        let srcEmitColor = raySource.color;
-                        const srcStep = gc.getGridStep(raySource.direction);
-                        const nextCol = idxColum + srcStep[0];
-                        const nextRow = idxRow + srcStep[1];
-                        if (nextCol >= 0 && nextCol < this.gridSize && nextRow >= 0 && nextRow < this.gridSize) {
-                            const nextCell = this.board.grid[nextRow][nextCol];
-                            const nextRay = nextCell.rays.find(r => r.direction === raySource.direction);
-                            if (nextRay) {
-                                srcEmitColor = nextRay.color;
-                            }
-                        }
-                        this.drawRayInCell(idxColum, idxRow, raySource.direction, this.getUIColor(srcEmitColor, true));
 
                         // 动态克隆节点逻辑
                         let srcNode = this.itemNodeMap.get(cell.item);
@@ -314,43 +286,23 @@ export class BoardView extends Component {
                         break;
                     case gc.IdReflector45: {
                         const reflector45 = cell.item as gc.Reflector45;
-                        cell.rays.forEach((ray: gc.Ray) => {
-                            const refDir = reflectAngle(ray.direction, reflector45.direction);
-                            let ref45Color = ray.color;
-                            const ref45Step = gc.getGridStep(refDir);
-                            const r45Col = idxColum + ref45Step[0];
-                            const r45Row = idxRow + ref45Step[1];
-                            if (r45Col >= 0 && r45Col < this.gridSize && r45Row >= 0 && r45Row < this.gridSize) {
-                                const r45Ray = this.board.grid[r45Row][r45Col].rays.find(r => r.direction === refDir);
-                                if (r45Ray) ref45Color = r45Ray.color;
+                        // 光线已通过 halfColors 统一绘制，此处仅处理道具节点
+                        let ref45Node = this.itemNodeMap.get(cell.item);
+                        if (!ref45Node && this.factory) {
+                            ref45Node = this.factory.createNode(cell.item);
+                            if (ref45Node) {
+                                this.node.addChild(ref45Node);
+                                this.itemNodeMap.set(cell.item, ref45Node);
                             }
-                            this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(ref45Color, true));
-                        });
+                        }
+                        if (ref45Node && this.draggedItem !== cell.item) {
+                            this.setNodeToCell(ref45Node, idxColum, idxRow);
+                            ref45Node.angle = reflector45.direction * 22.5;
+                        }
                         break;
                     }
                     case gc.IdReflector90: {
                         const reflector90 = cell.item as gc.Reflector90;
-                        cell.rays.forEach((ray: gc.Ray) => {
-                            const allowedRays = [
-                                (reflector90.direction + 6) % 16,
-                                (reflector90.direction + 8) % 16,
-                                (reflector90.direction + 10) % 16
-                            ];
-                            if (allowedRays.indexOf(ray.direction) !== -1) {
-                                const refDir = reflectAngle(ray.direction, reflector90.direction);
-                                // 从反射方向的下一个格子获取回传后的混色
-                                let refColor = ray.color;
-                                const refStep = gc.getGridStep(refDir);
-                                const rnCol = idxColum + refStep[0];
-                                const rnRow = idxRow + refStep[1];
-                                if (rnCol >= 0 && rnCol < this.gridSize && rnRow >= 0 && rnRow < this.gridSize) {
-                                    const rnRay = this.board.grid[rnRow][rnCol].rays.find(r => r.direction === refDir);
-                                    if (rnRay) refColor = rnRay.color;
-                                }
-                                this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(refColor, true));
-                            }
-                        });
-
                         let ref90Node = this.itemNodeMap.get(cell.item);
                         if (!ref90Node && this.factory) {
                             ref90Node = this.factory.createNode(cell.item);
@@ -368,28 +320,20 @@ export class BoardView extends Component {
                         break;
                     }
                     case gc.IdGlassReflector: {
-                        const glass = cell.item as gc.GlassReflector;
-                        cell.rays.forEach((ray: gc.Ray) => {
-                            const allowedRays = [
-                                (glass.direction + 6) % 16,
-                                (glass.direction + 8) % 16,
-                                (glass.direction + 10) % 16
-                            ];
-                            // 玻璃镜透射的前半截在上方(因为没被阻挡)已经绘制，这里只需补充反射产生的侧面半截光线
-                            if (allowedRays.indexOf(ray.direction) !== -1) {
-                                const refDir = reflectAngle(ray.direction, glass.direction);
-                                let glassRefColor = ray.color;
-                                const glassStep = gc.getGridStep(refDir);
-                                const grCol = idxColum + glassStep[0];
-                                const grRow = idxRow + glassStep[1];
-                                if (grCol >= 0 && grCol < this.gridSize && grRow >= 0 && grRow < this.gridSize) {
-                                    const grRay = this.board.grid[grRow][grCol].rays.find(r => r.direction === refDir);
-                                    if (grRay) glassRefColor = grRay.color;
-                                }
-                                this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(glassRefColor, true));
+                        // 玻璃镜逻辑同上，光线已由 halfColors 绘制
+                        let glassNode = this.itemNodeMap.get(cell.item);
+                        if (!glassNode && this.factory) {
+                            glassNode = this.factory.createNode(cell.item);
+                            if (glassNode) {
+                                this.node.addChild(glassNode);
+                                this.itemNodeMap.set(cell.item, glassNode);
                             }
-                        });
-                        // todo: 可以复用实例化 GlassReflector 节点相关代码，和 Reflector90 一样
+                        }
+                        if (glassNode && this.draggedItem !== cell.item) {
+                            this.setNodeToCell(glassNode, idxColum, idxRow);
+                            const glass = cell.item as gc.GlassReflector;
+                            glassNode.angle = glass.direction * 22.5;
+                        }
                         break;
                     }
                 }

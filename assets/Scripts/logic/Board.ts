@@ -36,7 +36,7 @@ export class Board {
     for (let y = 0; y < this.size; y++) {
       for (let x = 0; x < this.size; x++) {
         const cell = this.grid[y][x];
-        cell.rays.length = 0;
+        cell.resetRayState();
 
         // 每帧重置小灯状态，如果这帧光线真的经过它，会在 render() 里被重新点亮
         if (cell.item !== null && cell.item.type === gc.IdLittleLight) {
@@ -56,6 +56,15 @@ export class Board {
       const raySource = element.item as gc.RaySource;
       const step = gc.getGridStep(raySource.direction);
 
+      // 1. 设置光源格子的出射半截光线颜色
+      this.grid[element.y][element.x].halfColors[raySource.direction] = raySource.color;
+      // 同时也存入 rays 以兼容旧逻辑
+      this.grid[element.y][element.x].rays.push({
+        direction: raySource.direction,
+        color: raySource.color
+      });
+
+      // 2. 开始追踪
       this.traceRay(
         element.x + step[0],
         element.y + step[1],
@@ -64,66 +73,112 @@ export class Board {
         0
       );
     });
+
+    // 3. 路径颜色统一化：将混色结果沿着光路双向同步
+    // 确保对射产生的混色（如 Cyan）能回传到光源格子
+    this.unifyPathColors();
   }
 
-  // 递归追踪光线，方便后续扩展玻璃产生分叉光路
+  /**
+   * 路径颜色统一化通道：
+   * 遍历所有格子，如果两个相邻格子之间存在连通的光线段，则同步它们的颜色（取并集）。
+   * 迭代直到颜色不再变化。
+   */
+  private unifyPathColors() {
+    let changed = true;
+    for (let pass = 0; pass < this.size && changed; pass++) {
+      changed = false;
+      for (let y = 0; y < this.size; y++) {
+        for (let x = 0; x < this.size; x++) {
+          const cell = this.grid[y][x];
+          for (let d = 0; d < 16; d++) {
+            const color = cell.halfColors[d];
+            if (color.equals(gc.Color.Black)) continue;
+
+            const step = gc.getGridStep(d as gc.Direction);
+            const nx = x + step[0];
+            const ny = y + step[1];
+
+            if (nx >= 0 && nx < this.size && ny >= 0 && ny < this.size) {
+              const nextCell = this.grid[ny][nx];
+              const inDir = (d + 8) % 16;
+              const nextColor = nextCell.halfColors[inDir];
+
+              if (!color.equals(nextColor)) {
+                const mixed = gc.Color.add(color, nextColor);
+                cell.halfColors[d] = mixed;
+                nextCell.halfColors[inDir] = mixed;
+                changed = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 将统一后的 halfColors 同步回 rays
+    for (let y = 0; y < this.size; y++) {
+      for (let x = 0; x < this.size; x++) {
+        const cell = this.grid[y][x];
+        cell.rays.forEach(ray => {
+          ray.color = cell.halfColors[ray.direction];
+        });
+      }
+    }
+  }
+
+  // 递归追踪光线
   private traceRay(x: number, y: number, rayDire: gc.Direction, rayColor: gc.Color, depth: number) {
-    // 防止死循环（如果有互相反射导致的闭环）
     if (depth > 100) return;
 
     while (x >= 0 && x < this.size && y >= 0 && y < this.size) {
       const cell: gc.GridCell = this.grid[y][x];
 
-      // 渲染光线
+      // a. 设置进入格子的入射半截光线颜色
+      const inDir = (rayDire + 8) % 16 as gc.Direction;
+      cell.halfColors[inDir] = gc.Color.add(cell.halfColors[inDir], rayColor);
+
+      // b. 混色逻辑（兼容旧逻辑，利用 rays 数组判断对射）
       cell.rays.forEach((ray: gc.Ray) => {
         if (gc.oppositeDirection(ray.direction, rayDire)) {
-          // 修改光色
-          const mixed = gc.Color.add(rayColor, ray.color);
-          rayColor = ray.color = mixed;
+          rayColor = gc.Color.add(rayColor, ray.color);
         }
       });
 
-      // 防止同方向同色光无限堆叠（防环路逻辑补充）
+      // c. 防止无限堆叠
       const existingRay = cell.rays.find(r => r.direction === rayDire);
       if (existingRay && existingRay.color.equals(rayColor)) {
         break;
       }
 
-      cell.rays.push({ direction: rayDire, color: rayColor });
+      if (!existingRay) {
+        cell.rays.push({ direction: rayDire, color: rayColor });
+      } else {
+        existingRay.color = rayColor;
+      }
 
-      // 渲染道具
+      // d. 渲染道具并决定光线去向
       let shouldStopRay = false;
       if (cell.item !== null) {
         switch (cell.item.type) {
           case gc.IdRaySource:
-            // 光源实体具有物理限制，相当于一堵墙，打到它时光线立即终止被阻挡
             shouldStopRay = true;
             break;
 
           case gc.IdLittleLight:
             const littleLight = cell.item as gc.LittleLight;
-            const mixedColor = cell.rays.reduce(
-              (mixed: gc.Color, ray: gc.Ray) => gc.Color.add(mixed, ray.color),
-              gc.Color.Black
-            );
-            littleLight.on = mixedColor.equals(littleLight.color);
+            littleLight.on = cell.halfColors[inDir].equals(littleLight.color);
             break;
 
           case gc.IdReflector90: {
             const ref90 = cell.item as gc.Reflector90;
-            // 只有从正面及两个45度夹角射入的光线（即从 direction-2, direction, direction+2 射来）能被反射
-            // 转换为光线的行进方向 (rayDire = 来源方向 + 8)
-            const allowedRays = [
-              (ref90.direction + 6) % 16,
-              (ref90.direction + 8) % 16,
-              (ref90.direction + 10) % 16
-            ];
+            const allowedRays = [(ref90.direction + 6) % 16, (ref90.direction + 8) % 16, (ref90.direction + 10) % 16];
 
             if (allowedRays.indexOf(rayDire) !== -1) {
-              // 属于可反射方向，表面法线即等于它自身的朝向
-              rayDire = reflectAngle(rayDire, ref90.direction);
+              const newDir = reflectAngle(rayDire, ref90.direction);
+              cell.halfColors[newDir] = gc.Color.add(cell.halfColors[newDir], rayColor);
+              rayDire = newDir;
             } else {
-              // 其它方向进来的都是阻挡
               shouldStopRay = true;
             }
             break;
@@ -131,40 +186,37 @@ export class Board {
 
           case gc.IdReflector45: {
             const ref45 = cell.item as gc.Reflector45;
-            // 恢复 Reflector45 的基础法线，等待后续明确规则
-            rayDire = reflectAngle(rayDire, ref45.direction);
+            const newDir = reflectAngle(rayDire, ref45.direction);
+            cell.halfColors[newDir] = gc.Color.add(cell.halfColors[newDir], rayColor);
+            rayDire = newDir;
             break;
           }
 
           case gc.IdGlassReflector: {
             const glass = cell.item as gc.GlassReflector;
-            const allowedRays = [
-              (glass.direction + 6) % 16,
-              (glass.direction + 8) % 16,
-              (glass.direction + 10) % 16
-            ];
+            const allowedRays = [(glass.direction + 6) % 16, (glass.direction + 8) % 16, (glass.direction + 10) % 16];
 
-            // 只有当光线从正面射入时，才会产生反射的分支光路
             if (allowedRays.indexOf(rayDire) !== -1) {
               const refDir = reflectAngle(rayDire, glass.direction);
+              cell.halfColors[refDir] = gc.Color.add(cell.halfColors[refDir], rayColor);
               const refStep = gc.getGridStep(refDir);
               this.traceRay(x + refStep[0], y + refStep[1], refDir, rayColor, depth + 1);
             }
-
-            // 原光线方向保持不变，继续在while中前进（因为玻璃永远不会阻挡光线透射）
             break;
           }
         }
       }
 
       if (shouldStopRay) {
-        break; // 中断光线传播
+        break;
       }
 
-      // next cell
+      // e. 设置离开格子的出射半截光线颜色
+      cell.halfColors[rayDire] = gc.Color.add(cell.halfColors[rayDire], rayColor);
+
       const step = gc.getGridStep(rayDire);
       x += step[0];
       y += step[1];
-    } // end of while
+    }
   }
 }
