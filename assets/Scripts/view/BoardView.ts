@@ -1,7 +1,8 @@
-import { _decorator, Component, Graphics, Color, UITransform, Node, Sprite, SpriteFrame, v3, instantiate, EventTouch } from 'cc';
+import { _decorator, Component, Graphics, Color, UITransform, Node, Sprite, SpriteFrame, v3, instantiate, EventTouch, Vec2, director, Canvas } from 'cc';
 import { Board } from '../logic/Board';
 import * as gc from '../logic/GridCell';
 import { reflectAngle } from '../logic/Reflect';
+import { InventoryView } from './InventoryView';
 const { ccclass, property } = _decorator;
 
 export const UIColors = {
@@ -25,6 +26,7 @@ export const UIColors = {
 @ccclass('BoardView')
 export class BoardView extends Component {
     public graphics: Graphics | null = null;
+    public inventoryView: InventoryView | null = null;
 
     private board: Board | null = null;
 
@@ -35,6 +37,7 @@ export class BoardView extends Component {
     private raySourceRed: Node;
     private raySourceBlue: Node;
     private reflector90: Node;
+    private glassReflector: Node;
 
     // 增加一个字典：核心道具对象 -> 对应的UI节点，防止每帧重复克隆
     private itemNodeMap: Map<gc.Item, Node> = new Map();
@@ -61,6 +64,10 @@ export class BoardView extends Component {
         if (!this.reflector90) {
             throw new Error("BoardView: Missing 'Reflector90' child node!");
         }
+        this.glassReflector = this.node.getChildByName("GlassReflector");
+        if (!this.glassReflector) {
+            throw new Error("BoardView: Missing 'GlassReflector' child node!");
+        }
 
         this.board = new Board(this.gridSize);
         this.board.load({
@@ -71,12 +78,29 @@ export class BoardView extends Component {
                 { x: 7, y: 6, item: { type: gc.IdLittleLight, color: gc.Color.Magenta, on: false } as gc.LittleLight },
                 { x: 9, y: 8, item: { type: gc.IdLittleLight, color: gc.Color.Cyan, on: false } as gc.LittleLight },
                 { x: 7, y: 10, item: { type: gc.IdLittleLight, color: gc.Color.Yellow, on: false } as gc.LittleLight },
-                { x: 10, y: 1, item: { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90 },
-                { x: 10, y: 2, item: { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90 },
-                { x: 9, y: 2, item: { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90 },
             ],
-            items: [],
+            items: [
+                { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90,
+                { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90,
+                { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90,
+            ],
         });
+
+        // 尝试任意层级寻找 InventoryView
+        const scene = director.getScene();
+        let invView: InventoryView | null = null;
+        if (scene) {
+            invView = scene.getComponentInChildren(InventoryView);
+        }
+
+        if (invView) {
+            this.inventoryView = invView;
+            // 主动双向绑定
+            this.inventoryView.boardView = this;
+            if (this.board?.level) {
+                this.inventoryView.setItems(this.board.level.items);
+            }
+        }
 
         // 注册触摸/滑动事件监听，用于道具拖拽与旋转
         this.node.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
@@ -85,13 +109,12 @@ export class BoardView extends Component {
         this.node.on(Node.EventType.TOUCH_CANCEL, this.onTouchCancel, this);
     }
 
-    private getGridCoordFromTouch(event: EventTouch) {
-        const touchPos = event.getUILocation();
+    public getGridCoordFromGlobalPos(globalPos: Vec2) {
         const uiTransform = this.getComponent(UITransform);
         if (!uiTransform) return null;
 
         // 转换到节点局部中心坐标
-        const nodePos = uiTransform.convertToNodeSpaceAR(v3(touchPos.x, touchPos.y, 0));
+        const nodePos = uiTransform.convertToNodeSpaceAR(v3(globalPos.x, globalPos.y, 0));
 
         const boardWidth = this.gridSize * this.cellSize;
         const boardHeight = this.gridSize * this.cellSize;
@@ -110,9 +133,16 @@ export class BoardView extends Component {
         return { col, row, nodePos };
     }
 
+    private getTopmostParent(): Node | null {
+        const canvasComp = director.getScene()?.getComponentInChildren(Canvas);
+        if (canvasComp) return canvasComp.node;
+        return this.node.parent;
+    }
+
     private onTouchStart(event: EventTouch) {
         if (!this.board) return;
-        const coord = this.getGridCoordFromTouch(event);
+        const globalPos = event.getUILocation();
+        const coord = this.getGridCoordFromGlobalPos(globalPos);
         if (!coord) return;
         const { col, row } = coord;
 
@@ -127,8 +157,15 @@ export class BoardView extends Component {
                     this.draggedItem = cell.item;
                     this.draggedNode = this.itemNodeMap.get(cell.item) || null;
                     if (this.draggedNode) {
-                        // 拖拽时提到最上层
-                        this.draggedNode.setSiblingIndex(this.node.children.length - 1);
+                        const topParent = this.getTopmostParent();
+                        if (topParent) {
+                            const wPos = this.draggedNode.worldPosition.clone();
+                            this.draggedNode.removeFromParent();
+                            topParent.addChild(this.draggedNode);
+                            this.draggedNode.worldPosition = wPos;
+                            // 拖拽时提到最上层
+                            this.draggedNode.setSiblingIndex(topParent.children.length - 1);
+                        }
                     }
                     this.dragStartCol = col;
                     this.dragStartRow = row;
@@ -144,10 +181,14 @@ export class BoardView extends Component {
             this.dragHasMoved = true;
         }
 
-        const coord = this.getGridCoordFromTouch(event);
-        if (coord) {
-            // 跟随鼠标/手指移动
-            this.draggedNode.setPosition(coord.nodePos);
+        const globalPos = event.getUILocation();
+        const topParent = this.getTopmostParent();
+        if (topParent) {
+            const uiTrans = topParent.getComponent(UITransform);
+            if (uiTrans) {
+                const nodePos = uiTrans.convertToNodeSpaceAR(v3(globalPos.x, globalPos.y, 0));
+                this.draggedNode.setPosition(nodePos);
+            }
         }
     }
 
@@ -162,21 +203,33 @@ export class BoardView extends Component {
     private handleTouchDrop(event: EventTouch) {
         if (!this.board || !this.draggedItem) return;
 
-        const coord = this.getGridCoordFromTouch(event);
-        if (!coord) return;
-        const { col, row } = coord;
+        const globalPos = event.getUILocation();
+        const coord = this.getGridCoordFromGlobalPos(globalPos);
 
         let placedCol = this.dragStartCol;
         let placedRow = this.dragStartRow;
+        let movedToInventory = false;
 
         if (this.dragHasMoved) {
-            // 根据拖拽落点所在的格子判断
-            if (col >= 0 && col < this.gridSize && row >= 0 && row < this.gridSize) {
-                const targetCell = this.board.grid[row][col];
+            if (coord && coord.col >= 0 && coord.col < this.gridSize && coord.row >= 0 && coord.row < this.gridSize) {
+                const targetCell = this.board.grid[coord.row][coord.col];
                 // 如果目标网格为空地，就可以放置
                 if (targetCell.item === null) {
-                    placedCol = col;
-                    placedRow = row;
+                    placedCol = coord.col;
+                    placedRow = coord.row;
+                }
+            } else if (this.inventoryView) {
+                const invCoord = this.inventoryView.getGridCoordFromGlobalPos(globalPos);
+                if (invCoord && invCoord.col >= 0 && invCoord.col < this.inventoryView.cols && invCoord.row >= 0 && invCoord.row < this.inventoryView.rows) {
+                    if (this.inventoryView.grid[invCoord.row][invCoord.col] === null) {
+                        movedToInventory = true;
+                        this.inventoryView.grid[invCoord.row][invCoord.col] = this.draggedItem;
+                        let node = this.draggedNode;
+                        if (node) {
+                            this.itemNodeMap.delete(this.draggedItem);
+                            this.inventoryView.insertItemNode(this.draggedItem, node);
+                        }
+                    }
                 }
             }
         } else {
@@ -187,14 +240,36 @@ export class BoardView extends Component {
             }
         }
 
-        // 先把原格子置空
-        this.board.grid[this.dragStartRow][this.dragStartCol].item = null;
-        // 把道具放回棋盘指定的格子里
-        this.board.grid[placedRow][placedCol].item = this.draggedItem;
+        if (movedToInventory) {
+            this.board.grid[this.dragStartRow][this.dragStartCol].item = null;
+        } else {
+            // 原格子置空
+            this.board.grid[this.dragStartRow][this.dragStartCol].item = null;
+            // 道具放回棋盘指定格子
+            this.board.grid[placedRow][placedCol].item = this.draggedItem;
+            // 将道具重新塞回当前视图麾下
+            if (this.draggedNode && this.draggedItem) {
+                this.insertItemNode(this.draggedItem, this.draggedNode);
+            }
+        }
 
         // 结束拖拽清理引用
         this.draggedItem = null;
         this.draggedNode = null;
+    }
+
+    public insertItemNode(item: gc.Item, node: Node) {
+        node.removeFromParent();
+        this.node.addChild(node);
+        this.itemNodeMap.set(item, node);
+    }
+
+    public getBoard() {
+        return this.board;
+    }
+
+    public getGridSize() {
+        return this.gridSize;
     }
 
     update(dt: number): void {
