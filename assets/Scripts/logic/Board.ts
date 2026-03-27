@@ -77,6 +77,30 @@ export class Board {
     // 3. 路径颜色统一化：将混色结果沿着光路双向同步
     // 确保对射产生的混色（如 Cyan）能回传到光源格子
     this.unifyPathColors();
+
+    // 4. 更新小灯状态（利用统一后的完整混色数据）
+    this.updateLampStates();
+  }
+
+  /**
+   * 更新所有小灯的点亮状态。
+   * 小灯的点亮条件是：经过该格子的所有光线颜色之和等于小灯自身的颜色。
+   */
+  private updateLampStates() {
+    for (let y = 0; y < this.size; y++) {
+      for (let x = 0; x < this.size; x++) {
+        const cell = this.grid[y][x];
+        if (cell.item && cell.item.type === gc.IdLittleLight) {
+          const lamp = cell.item as gc.LittleLight;
+          // 合并该格子所有 16 个方向的半截光色
+          const totalMixedColor = cell.halfColors.reduce(
+            (acc, curr) => gc.Color.add(acc, curr),
+            gc.Color.Black
+          );
+          lamp.on = totalMixedColor.equals(lamp.color);
+        }
+      }
+    }
   }
 
   /**
@@ -166,8 +190,7 @@ export class Board {
             break;
 
           case gc.IdLittleLight:
-            const littleLight = cell.item as gc.LittleLight;
-            littleLight.on = cell.halfColors[inDir].equals(littleLight.color);
+            // 小灯状态在 render() 最后的 updateLampStates 中统一更新，此处不处理
             break;
 
           case gc.IdReflector90: {
