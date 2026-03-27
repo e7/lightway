@@ -101,7 +101,7 @@ export class Color {
   /**
    * 把二进制值转回对应颜色对象
    */
-  private static fromValue(value: number): Color {
+  public static fromValue(value: number): Color {
     switch (value) {
       case 0:
         return Color.Black;

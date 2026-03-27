@@ -55,7 +55,8 @@ export class InventoryView extends Component {
 
     public setItems(items: gc.Item[]) {
         let i = 0;
-        for (let y = 0; y < this.rows; y++) {
+        // 倒序遍历行：从 top (row=1) 开始放置，然后是 bottom (row=0)
+        for (let y = this.rows - 1; y >= 0; y--) {
             for (let x = 0; x < this.cols; x++) {
                 if (i < items.length) {
                     this.grid[y][x] = items[i];
@@ -213,8 +214,8 @@ export class InventoryView extends Component {
      * 自动寻找第一个空格子
      */
     public placeItemFromOutside(item: gc.Item, node: Node) {
-        // 找第一个空位
-        for (let y = 0; y < this.rows; y++) {
+        // 找第一个空位：优先从 top (row=1) 开始搜索
+        for (let y = this.rows - 1; y >= 0; y--) {
             for (let x = 0; x < this.cols; x++) {
                 if (this.grid[y][x] === null) {
                     this.grid[y][x] = item;
@@ -223,8 +224,8 @@ export class InventoryView extends Component {
                 }
             }
         }
-        // 如果没有空位，仍然尝试放到 (0,0)
-        this.grid[0][0] = item;
+        // 如果没有空位，仍然尝试放到顶排第一个 (col=0, row=1)
+        this.grid[this.rows - 1][0] = item;
         this.insertItemNode(item, node);
     }
 

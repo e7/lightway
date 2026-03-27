@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, director } from 'cc';
+import { _decorator, Component, Node, Vec2, director, resources, JsonAsset } from 'cc';
 import { Board, Level } from '../logic/Board';
 import * as gc from '../logic/GridCell';
 import { BoardView } from './BoardView';
@@ -45,34 +45,63 @@ export class GameController extends Component {
             }
         }
 
-        // 创建 Board 并加载关卡
-        this.board = new Board(15);
-        this.board.load({
-            staticItems: [
-                { x: 0, y: 11, item: { type: gc.IdRaySource, direction: gc.Dir7PI_4, color: gc.Color.Blue } as gc.RaySource },
-                { x: 3, y: 0, item: { type: gc.IdRaySource, direction: gc.DirPI_4, color: gc.Color.Green } as gc.RaySource },
-                { x: 14, y: 3, item: { type: gc.IdRaySource, direction: gc.DirPI, color: gc.Color.Red } as gc.RaySource },
-                { x: 7, y: 6, item: { type: gc.IdLittleLight, color: gc.Color.Magenta, on: false } as gc.LittleLight },
-                { x: 9, y: 8, item: { type: gc.IdLittleLight, color: gc.Color.Cyan, on: false } as gc.LittleLight },
-                { x: 7, y: 10, item: { type: gc.IdLittleLight, color: gc.Color.Yellow, on: false } as gc.LittleLight },
-            ],
-            items: [
-                { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90,
-                { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90,
-                { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90,
-            ],
-        });
+        // 异步加载第一关
+        this.loadLevel(4);
+    }
 
-        // 初始化 BoardView
+    /**
+     * 从 resources/levels 目录异步加载 JSON 关卡
+     */
+    public loadLevel(levelIndex: number) {
+        const path = `levels/level${levelIndex}`;
+
+        resources.load(path, JsonAsset, (err: Error | null, asset: JsonAsset) => {
+            if (err) {
+                console.error(`GameController: Failed to load level ${levelIndex}`, err);
+                return;
+            }
+            this.initLevel(asset.json);
+        });
+    }
+
+    private initLevel(data: any) {
+        if (!this.boardView) return;
+
+        // 1. 数据实例化（将 JSON 纯对象还原为逻辑类，如 Color）
+        const levelData: Level = {
+            staticItems: data.staticItems.map((s: any) => ({
+                x: s.x,
+                y: s.y,
+                item: this.inflateItem(s.item)
+            })),
+            items: data.items.map((i: any) => this.inflateItem(i))
+        };
+
+        // 2. 创建 Board 并加载关卡
+        this.board = new Board(15);
+        this.board.load(levelData);
+
+        // 3. 初始化 BoardView
         this.boardView.init(this.board, this.factory);
 
-        // 初始化 InventoryView
+        // 4. 初始化 InventoryView
         if (this.inventoryView && this.board.level) {
             this.inventoryView.init(this.board.level.items, this.factory);
         }
 
-        // 注册跨区域拖拽回调
+        // 5. 注册跨区域拖拽回调
         this.setupCrossDropCallbacks();
+
+        console.log('GameController: Level initialized successfully.');
+    }
+
+    private inflateItem(data: any): gc.Item {
+        const item = { ...data };
+        // 处理颜色对象的还原
+        if (typeof data.color === 'number') {
+            item.color = gc.Color.fromValue(data.color);
+        }
+        return item as gc.Item;
     }
 
     private setupCrossDropCallbacks() {
