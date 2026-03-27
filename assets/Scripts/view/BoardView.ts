@@ -2,7 +2,7 @@ import { _decorator, Component, Graphics, Color, UITransform, Node, Sprite, Spri
 import { Board } from '../logic/Board';
 import * as gc from '../logic/GridCell';
 import { reflectAngle } from '../logic/Reflect';
-import { InventoryView } from './InventoryView';
+import { ItemNodeFactory } from './ItemNodeFactory';
 const { ccclass, property } = _decorator;
 
 export const UIColors = {
@@ -26,18 +26,13 @@ export const UIColors = {
 @ccclass('BoardView')
 export class BoardView extends Component {
     public graphics: Graphics | null = null;
-    public inventoryView: InventoryView | null = null;
 
     private board: Board | null = null;
+    private factory: ItemNodeFactory | null = null;
 
     // 逻辑常量
     private readonly gridSize = 15;
     private readonly cellSize = 48;
-
-    private raySourceRed: Node;
-    private raySourceBlue: Node;
-    private reflector90: Node;
-    private glassReflector: Node;
 
     // 增加一个字典：核心道具对象 -> 对应的UI节点，防止每帧重复克隆
     private itemNodeMap: Map<gc.Item, Node> = new Map();
@@ -48,65 +43,25 @@ export class BoardView extends Component {
     private dragStartRow: number = -1;
     private dragHasMoved: boolean = false;
 
+    /** 当道具被拖拽到棋盘外部时触发，由 GameController 设置 */
+    public onItemDroppedOutside?: (item: gc.Item, node: Node, globalPos: Vec2) => void;
+
     start() {
         this.graphics = this.getComponent(Graphics);
-
-        // 获取道具模板
-        this.raySourceRed = this.node.getChildByName("RaySourceRed");
-        if (!this.raySourceRed) {
-            throw new Error("BoardView: Missing 'RaySourceRed' child node!");
-        }
-        this.raySourceBlue = this.node.getChildByName("RaySourceBlue");
-        if (!this.raySourceBlue) {
-            throw new Error("BoardView: Missing 'RaySourceBlue' child node!");
-        }
-        this.reflector90 = this.node.getChildByName("Reflector90");
-        if (!this.reflector90) {
-            throw new Error("BoardView: Missing 'Reflector90' child node!");
-        }
-        this.glassReflector = this.node.getChildByName("GlassReflector");
-        if (!this.glassReflector) {
-            throw new Error("BoardView: Missing 'GlassReflector' child node!");
-        }
-
-        this.board = new Board(this.gridSize);
-        this.board.load({
-            staticItems: [
-                { x: 0, y: 11, item: { type: gc.IdRaySource, direction: gc.Dir7PI_4, color: gc.Color.Blue } as gc.RaySource },
-                { x: 3, y: 0, item: { type: gc.IdRaySource, direction: gc.DirPI_4, color: gc.Color.Green } as gc.RaySource },
-                { x: 14, y: 3, item: { type: gc.IdRaySource, direction: gc.DirPI, color: gc.Color.Red } as gc.RaySource },
-                { x: 7, y: 6, item: { type: gc.IdLittleLight, color: gc.Color.Magenta, on: false } as gc.LittleLight },
-                { x: 9, y: 8, item: { type: gc.IdLittleLight, color: gc.Color.Cyan, on: false } as gc.LittleLight },
-                { x: 7, y: 10, item: { type: gc.IdLittleLight, color: gc.Color.Yellow, on: false } as gc.LittleLight },
-            ],
-            items: [
-                { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90,
-                { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90,
-                { type: gc.IdReflector90, direction: gc.Dir5PI_4 } as gc.Reflector90,
-            ],
-        });
-
-        // 尝试任意层级寻找 InventoryView
-        const scene = director.getScene();
-        let invView: InventoryView | null = null;
-        if (scene) {
-            invView = scene.getComponentInChildren(InventoryView);
-        }
-
-        if (invView) {
-            this.inventoryView = invView;
-            // 主动双向绑定
-            this.inventoryView.boardView = this;
-            if (this.board?.level) {
-                this.inventoryView.setItems(this.board.level.items);
-            }
-        }
 
         // 注册触摸/滑动事件监听，用于道具拖拽与旋转
         this.node.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
         this.node.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
         this.node.on(Node.EventType.TOUCH_CANCEL, this.onTouchCancel, this);
+    }
+
+    /**
+     * 由 GameController 调用，传入 Board 和 ItemNodeFactory
+     */
+    public init(board: Board, factory: ItemNodeFactory) {
+        this.board = board;
+        this.factory = factory;
     }
 
     public getGridCoordFromGlobalPos(globalPos: Vec2) {
@@ -208,7 +163,7 @@ export class BoardView extends Component {
 
         let placedCol = this.dragStartCol;
         let placedRow = this.dragStartRow;
-        let movedToInventory = false;
+        let droppedOutside = false;
 
         if (this.dragHasMoved) {
             if (coord && coord.col >= 0 && coord.col < this.gridSize && coord.row >= 0 && coord.row < this.gridSize) {
@@ -218,30 +173,26 @@ export class BoardView extends Component {
                     placedCol = coord.col;
                     placedRow = coord.row;
                 }
-            } else if (this.inventoryView) {
-                const invCoord = this.inventoryView.getGridCoordFromGlobalPos(globalPos);
-                if (invCoord && invCoord.col >= 0 && invCoord.col < this.inventoryView.cols && invCoord.row >= 0 && invCoord.row < this.inventoryView.rows) {
-                    if (this.inventoryView.grid[invCoord.row][invCoord.col] === null) {
-                        movedToInventory = true;
-                        this.inventoryView.grid[invCoord.row][invCoord.col] = this.draggedItem;
-                        let node = this.draggedNode;
-                        if (node) {
-                            this.itemNodeMap.delete(this.draggedItem);
-                            this.inventoryView.insertItemNode(this.draggedItem, node);
-                        }
-                    }
-                }
+            } else {
+                // 拖到棋盘外部 → 通过回调通知 GameController
+                droppedOutside = true;
             }
         } else {
-            // 没有发生拖拽位移，视作“点击”来旋转道具
+            // 没有发生拖拽位移，视作"点击"来旋转道具
             const ref = this.draggedItem as any;
             if (typeof ref.direction !== 'undefined') {
                 ref.direction = (ref.direction + 2) % 16 as gc.Direction;
             }
         }
 
-        if (movedToInventory) {
+        if (droppedOutside) {
+            // 从棋盘格清除道具
             this.board.grid[this.dragStartRow][this.dragStartCol].item = null;
+            this.itemNodeMap.delete(this.draggedItem);
+            // 通知外部处理（GameController 会决定放到 InventoryView 还是退回）
+            if (this.onItemDroppedOutside && this.draggedNode) {
+                this.onItemDroppedOutside(this.draggedItem, this.draggedNode, globalPos);
+            }
         } else {
             // 原格子置空
             this.board.grid[this.dragStartRow][this.dragStartCol].item = null;
@@ -258,10 +209,22 @@ export class BoardView extends Component {
         this.draggedNode = null;
     }
 
+    /**
+     * 将道具节点挂载到 BoardView 并记录映射
+     */
     public insertItemNode(item: gc.Item, node: Node) {
         node.removeFromParent();
         this.node.addChild(node);
         this.itemNodeMap.set(item, node);
+    }
+
+    /**
+     * 从外部（如 InventoryView）放置道具到棋盘指定格子
+     */
+    public placeItemFromOutside(item: gc.Item, node: Node, col: number, row: number) {
+        if (!this.board) return;
+        this.board.grid[row][col].item = item;
+        this.insertItemNode(item, node);
     }
 
     public getBoard() {
@@ -308,7 +271,7 @@ export class BoardView extends Component {
                         this.drawRayInCell(idxColum, idxRow, ray.direction, uiColor);
                     }
 
-                    // 反方向的另半条光线，代表光线是“穿入”这个格子的（入射光线必然存在）
+                    // 反方向的另半条光线，代表光线是"穿入"这个格子的（入射光线必然存在）
                     const oppositeDir = (ray.direction + 8) % 16 as gc.Direction;
                     this.drawRayInCell(idxColum, idxRow, oppositeDir, uiColor);
                 });
@@ -324,31 +287,18 @@ export class BoardView extends Component {
 
                         // 动态克隆节点逻辑
                         let srcNode = this.itemNodeMap.get(cell.item);
-                        if (!srcNode) {
-                            // 第1帧发现字典里没有它：从模板克隆出一个新的实体
-                            let templateName = "RaySourceWhite";
-                            if (raySource.color.equals(gc.Color.Red)) templateName = "RaySourceRed";
-                            else if (raySource.color.equals(gc.Color.Green)) templateName = "RaySourceGreen";
-                            else if (raySource.color.equals(gc.Color.Blue)) templateName = "RaySourceBlue";
-                            else if (raySource.color.equals(gc.Color.Yellow)) templateName = "RaySourceYellow";
-                            else if (raySource.color.equals(gc.Color.Cyan)) templateName = "RaySourceCyan";
-                            else if (raySource.color.equals(gc.Color.Magenta)) templateName = "RaySourceMagenta";
-
-                            let templateNode = this.node.getChildByName(templateName);
-                            if (!templateNode) {
-                                console.warn(`BoardView: Missing '${templateName}' fallback to RaySourceRed`);
-                                templateNode = this.raySourceRed; // 后备方案
+                        if (!srcNode && this.factory) {
+                            srcNode = this.factory.createNode(cell.item);
+                            if (srcNode) {
+                                this.node.addChild(srcNode);
+                                this.itemNodeMap.set(cell.item, srcNode);
                             }
-
-                            srcNode = instantiate(templateNode!);
-                            srcNode.active = true;
-                            // 挂载到父节点才会真正显示出该模板
-                            this.node.addChild(srcNode);
-                            this.itemNodeMap.set(cell.item, srcNode);
                         }
 
-                        this.setNodeToCell(srcNode, idxColum, idxRow);
-                        srcNode.angle = raySource.direction * 22.5;
+                        if (srcNode) {
+                            this.setNodeToCell(srcNode, idxColum, idxRow);
+                            srcNode.angle = raySource.direction * 22.5;
+                        }
                         break;
                     case gc.IdReflector45: {
                         const reflector45 = cell.item as gc.Reflector45;
@@ -373,15 +323,16 @@ export class BoardView extends Component {
                         });
 
                         let ref90Node = this.itemNodeMap.get(cell.item);
-                        if (!ref90Node) {
-                            ref90Node = instantiate(this.reflector90!);
-                            ref90Node.active = true;
-                            this.node.addChild(ref90Node);
-                            this.itemNodeMap.set(cell.item, ref90Node);
+                        if (!ref90Node && this.factory) {
+                            ref90Node = this.factory.createNode(cell.item);
+                            if (ref90Node) {
+                                this.node.addChild(ref90Node);
+                                this.itemNodeMap.set(cell.item, ref90Node);
+                            }
                         }
 
                         // 如果这个道具正在被拖拽，将不会强制锁定到网格中心，从而让 `onTouchMove` 控制其跟随手指
-                        if (this.draggedItem !== cell.item) {
+                        if (ref90Node && this.draggedItem !== cell.item) {
                             this.setNodeToCell(ref90Node, idxColum, idxRow);
                             ref90Node.angle = reflector90.direction * 22.5;
                         }
@@ -580,12 +531,6 @@ export class BoardView extends Component {
         // 2. 添加 Sprite 组件并设置图片帧
         const spriteComp = spriteNode.addComponent(Sprite);
         spriteComp.spriteFrame = spriteFrame;
-
-        // 可选：如果要统一缩放确保精灵不超出格子，可以获取它并限制尺寸
-        // const uiTransform = spriteNode.getComponent(UITransform);
-        // if (uiTransform) {
-        //     uiTransform.setContentSize(this.cellSize, this.cellSize);
-        // }
 
         // 3. 计算坐标并设置节点的位置
         const pos = this.getCellCenterPosition(col, row);

@@ -1,12 +1,11 @@
-import { _decorator, Component, Node, Graphics, Color, UITransform, EventTouch, Vec2, v3, instantiate, director, Canvas } from 'cc';
+import { _decorator, Component, Node, Graphics, Color, UITransform, EventTouch, Vec2, v3, director, Canvas } from 'cc';
 import * as gc from '../logic/GridCell';
-import { BoardView } from './BoardView';
+import { ItemNodeFactory } from './ItemNodeFactory';
 const { ccclass, property } = _decorator;
 
 @ccclass('InventoryView')
 export class InventoryView extends Component {
     public graphics: Graphics | null = null;
-    public boardView: BoardView | null = null;
 
     // 逻辑常量
     public readonly cols = 15;
@@ -16,11 +15,16 @@ export class InventoryView extends Component {
     public grid: (gc.Item | null)[][] = [];
     public itemNodeMap: Map<gc.Item, Node> = new Map();
 
+    private factory: ItemNodeFactory | null = null;
+
     private draggedItem: gc.Item | null = null;
     private draggedNode: Node | null = null;
     private dragStartCol: number = -1;
     private dragStartRow: number = -1;
     private dragHasMoved: boolean = false;
+
+    /** 当道具被拖拽到 Inventory 外部时触发，由 GameController 设置 */
+    public onItemDroppedOutside?: (item: gc.Item, node: Node, globalPos: Vec2) => void;
 
     onLoad() {
         for (let y = 0; y < this.rows; y++) {
@@ -35,22 +39,18 @@ export class InventoryView extends Component {
         this.graphics = this.getComponent(Graphics);
         this.drawGrid();
 
-        const scene = director.getScene();
-        if (scene) {
-            const bView = scene.getComponentInChildren(BoardView);
-            if (bView) {
-                this.boardView = bView;
-                this.boardView.inventoryView = this; // 主动关联
-                if (this.boardView.getBoard()?.level) {
-                    this.setItems(this.boardView.getBoard()!.level!.items);
-                }
-            }
-        }
-
         this.node.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
         this.node.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
         this.node.on(Node.EventType.TOUCH_CANCEL, this.onTouchCancel, this);
+    }
+
+    /**
+     * 由 GameController 调用，传入道具列表和工厂
+     */
+    public init(items: gc.Item[], factory: ItemNodeFactory) {
+        this.factory = factory;
+        this.setItems(items);
     }
 
     public setItems(items: gc.Item[]) {
@@ -158,7 +158,7 @@ export class InventoryView extends Component {
 
         let placedCol = this.dragStartCol;
         let placedRow = this.dragStartRow;
-        let movedToBoard = false;
+        let droppedOutside = false;
 
         if (this.dragHasMoved) {
             if (coord && coord.col >= 0 && coord.col < this.cols && coord.row >= 0 && coord.row < this.rows) {
@@ -166,22 +166,9 @@ export class InventoryView extends Component {
                     placedCol = coord.col;
                     placedRow = coord.row;
                 }
-            } else if (this.boardView && this.boardView.getBoard()) {
-                const bView = this.boardView;
-                const boardCoord = bView.getGridCoordFromGlobalPos(globalPos);
-                const gridSize = bView.getGridSize();
-                if (boardCoord && boardCoord.col >= 0 && boardCoord.col < gridSize && boardCoord.row >= 0 && boardCoord.row < gridSize) {
-                    if (bView.getBoard()!.grid[boardCoord.row][boardCoord.col].item === null) {
-                        movedToBoard = true;
-                        bView.getBoard()!.grid[boardCoord.row][boardCoord.col].item = this.draggedItem;
-                        let node = this.draggedNode;
-                        // 这里不需要检查节点是否空，为了严谨最好检查下
-                        if (node) {
-                            this.itemNodeMap.delete(this.draggedItem);
-                            bView.insertItemNode(this.draggedItem, node);
-                        }
-                    }
-                }
+            } else {
+                // 拖到 Inventory 外部 → 通过回调通知 GameController
+                droppedOutside = true;
             }
         } else {
             // 点击行为进行旋转
@@ -191,8 +178,14 @@ export class InventoryView extends Component {
             }
         }
 
-        if (movedToBoard) {
+        if (droppedOutside) {
+            // 从 Inventory 格子清除道具
             this.grid[this.dragStartRow][this.dragStartCol] = null;
+            this.itemNodeMap.delete(this.draggedItem);
+            // 通知外部处理（GameController 会决定放到 BoardView 还是退回）
+            if (this.onItemDroppedOutside && this.draggedNode) {
+                this.onItemDroppedOutside(this.draggedItem, this.draggedNode, globalPos);
+            }
         } else {
             this.grid[this.dragStartRow][this.dragStartCol] = null;
             this.grid[placedRow][placedCol] = this.draggedItem;
@@ -206,10 +199,45 @@ export class InventoryView extends Component {
         this.draggedNode = null;
     }
 
+    /**
+     * 将道具节点挂载到 InventoryView 并记录映射
+     */
     public insertItemNode(item: gc.Item, node: Node) {
         node.removeFromParent();
         this.node.addChild(node);
         this.itemNodeMap.set(item, node);
+    }
+
+    /**
+     * 从外部（如 BoardView）放置道具到 Inventory 的空位
+     * 自动寻找第一个空格子
+     */
+    public placeItemFromOutside(item: gc.Item, node: Node) {
+        // 找第一个空位
+        for (let y = 0; y < this.rows; y++) {
+            for (let x = 0; x < this.cols; x++) {
+                if (this.grid[y][x] === null) {
+                    this.grid[y][x] = item;
+                    this.insertItemNode(item, node);
+                    return;
+                }
+            }
+        }
+        // 如果没有空位，仍然尝试放到 (0,0)
+        this.grid[0][0] = item;
+        this.insertItemNode(item, node);
+    }
+
+    /**
+     * 尝试将道具放置到 Inventory 指定格子
+     * @returns 是否放置成功
+     */
+    public placeItemAt(item: gc.Item, node: Node, col: number, row: number): boolean {
+        if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return false;
+        if (this.grid[row][col] !== null) return false;
+        this.grid[row][col] = item;
+        this.insertItemNode(item, node);
+        return true;
     }
 
     update(dt: number): void {
@@ -220,8 +248,8 @@ export class InventoryView extends Component {
                 const item = this.grid[row][col];
                 if (item) {
                     let itemNode = this.itemNodeMap.get(item);
-                    if (!itemNode) {
-                        itemNode = this.createNodeForItem(item);
+                    if (!itemNode && this.factory) {
+                        itemNode = this.factory.createNode(item);
                         if (itemNode) {
                             this.node.addChild(itemNode);
                             this.itemNodeMap.set(item, itemNode);
@@ -238,33 +266,6 @@ export class InventoryView extends Component {
                 }
             }
         }
-    }
-
-    private createNodeForItem(item: gc.Item): Node | null {
-        if (!this.boardView) return null;
-        if (item.type === gc.IdReflector90) {
-            const template = this.boardView.node.getChildByName("Reflector90");
-            if (template) {
-                const node = instantiate(template);
-                node.active = true;
-                return node;
-            }
-        } else if (item.type === gc.IdReflector45) {
-            const template = this.boardView.node.getChildByName("Reflector45");
-            if (template) {
-                const node = instantiate(template);
-                node.active = true;
-                return node;
-            }
-        } else if (item.type === gc.IdGlassReflector) {
-            const template = this.boardView.node.getChildByName("GlassReflector");
-            if (template) {
-                const node = instantiate(template);
-                node.active = true;
-                return node;
-            }
-        }
-        return null;
     }
 
     public getCellCenterPosition(col: number, row: number) {
