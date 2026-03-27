@@ -261,17 +261,15 @@ export class BoardView extends Component {
                     let isBlocked = false;
                     if (cell.item) {
                         const type = cell.item.type;
-                        // 光源会阻挡；反射镜改变了方向，也会阻挡顺延方向的绘制
                         isBlocked = (type === gc.IdRaySource || type === gc.IdReflector45 || type === gc.IdReflector90);
-                        // 其它如 空地、小灯泡(LittleLight)、玻璃(GlassReflector) 不会阻挡
                     }
 
-                    // 如果没有被阻挡，才需要画顺沿方向的半条出射光线
+                    // 如果没有被阻挡，画顺沿方向的半条出射光线
                     if (!isBlocked) {
                         this.drawRayInCell(idxColum, idxRow, ray.direction, uiColor);
                     }
 
-                    // 反方向的另半条光线，代表光线是"穿入"这个格子的（入射光线必然存在）
+                    // 反方向的另半条光线，代表光线是"穿入"这个格子的
                     const oppositeDir = (ray.direction + 8) % 16 as gc.Direction;
                     this.drawRayInCell(idxColum, idxRow, oppositeDir, uiColor);
                 });
@@ -283,7 +281,21 @@ export class BoardView extends Component {
                 switch (cell.item.type) {
                     case gc.IdRaySource:
                         const raySource = cell.item as gc.RaySource;
-                        this.drawRayInCell(idxColum, idxRow, raySource.direction, this.getUIColor(raySource.color, true));
+
+                        // 从光线路径的第一个格子获取回传后的混色，而非使用光源原色
+                        // 这样当两束光线对射混色时，光源格子也能显示正确的混合色
+                        let srcEmitColor = raySource.color;
+                        const srcStep = gc.getGridStep(raySource.direction);
+                        const nextCol = idxColum + srcStep[0];
+                        const nextRow = idxRow + srcStep[1];
+                        if (nextCol >= 0 && nextCol < this.gridSize && nextRow >= 0 && nextRow < this.gridSize) {
+                            const nextCell = this.board.grid[nextRow][nextCol];
+                            const nextRay = nextCell.rays.find(r => r.direction === raySource.direction);
+                            if (nextRay) {
+                                srcEmitColor = nextRay.color;
+                            }
+                        }
+                        this.drawRayInCell(idxColum, idxRow, raySource.direction, this.getUIColor(srcEmitColor, true));
 
                         // 动态克隆节点逻辑
                         let srcNode = this.itemNodeMap.get(cell.item);
@@ -304,7 +316,15 @@ export class BoardView extends Component {
                         const reflector45 = cell.item as gc.Reflector45;
                         cell.rays.forEach((ray: gc.Ray) => {
                             const refDir = reflectAngle(ray.direction, reflector45.direction);
-                            this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(ray.color, true));
+                            let ref45Color = ray.color;
+                            const ref45Step = gc.getGridStep(refDir);
+                            const r45Col = idxColum + ref45Step[0];
+                            const r45Row = idxRow + ref45Step[1];
+                            if (r45Col >= 0 && r45Col < this.gridSize && r45Row >= 0 && r45Row < this.gridSize) {
+                                const r45Ray = this.board.grid[r45Row][r45Col].rays.find(r => r.direction === refDir);
+                                if (r45Ray) ref45Color = r45Ray.color;
+                            }
+                            this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(ref45Color, true));
                         });
                         break;
                     }
@@ -318,7 +338,16 @@ export class BoardView extends Component {
                             ];
                             if (allowedRays.indexOf(ray.direction) !== -1) {
                                 const refDir = reflectAngle(ray.direction, reflector90.direction);
-                                this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(ray.color, true));
+                                // 从反射方向的下一个格子获取回传后的混色
+                                let refColor = ray.color;
+                                const refStep = gc.getGridStep(refDir);
+                                const rnCol = idxColum + refStep[0];
+                                const rnRow = idxRow + refStep[1];
+                                if (rnCol >= 0 && rnCol < this.gridSize && rnRow >= 0 && rnRow < this.gridSize) {
+                                    const rnRay = this.board.grid[rnRow][rnCol].rays.find(r => r.direction === refDir);
+                                    if (rnRay) refColor = rnRay.color;
+                                }
+                                this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(refColor, true));
                             }
                         });
 
@@ -349,7 +378,15 @@ export class BoardView extends Component {
                             // 玻璃镜透射的前半截在上方(因为没被阻挡)已经绘制，这里只需补充反射产生的侧面半截光线
                             if (allowedRays.indexOf(ray.direction) !== -1) {
                                 const refDir = reflectAngle(ray.direction, glass.direction);
-                                this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(ray.color, true));
+                                let glassRefColor = ray.color;
+                                const glassStep = gc.getGridStep(refDir);
+                                const grCol = idxColum + glassStep[0];
+                                const grRow = idxRow + glassStep[1];
+                                if (grCol >= 0 && grCol < this.gridSize && grRow >= 0 && grRow < this.gridSize) {
+                                    const grRay = this.board.grid[grRow][grCol].rays.find(r => r.direction === refDir);
+                                    if (grRay) glassRefColor = grRay.color;
+                                }
+                                this.drawRayInCell(idxColum, idxRow, refDir, this.getUIColor(glassRefColor, true));
                             }
                         });
                         // todo: 可以复用实例化 GlassReflector 节点相关代码，和 Reflector90 一样

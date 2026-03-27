@@ -28,7 +28,7 @@ export class GameController extends Component {
         const scene = director.getScene();
         if (!scene) return;
 
-        // 1. 查找 View 组件
+        // 查找 View 组件
         this.boardView = scene.getComponentInChildren(BoardView);
         this.inventoryView = scene.getComponentInChildren(InventoryView);
 
@@ -37,7 +37,7 @@ export class GameController extends Component {
             return;
         }
 
-        // 2. 从 BoardView 节点下收集道具模板，注册到工厂
+        // 从 BoardView 节点下收集道具模板，注册到工厂
         for (const name of GameController.TEMPLATE_NAMES) {
             const tpl = this.boardView.node.getChildByName(name);
             if (tpl) {
@@ -45,7 +45,7 @@ export class GameController extends Component {
             }
         }
 
-        // 3. 创建 Board 并加载关卡
+        // 创建 Board 并加载关卡
         this.board = new Board(15);
         this.board.load({
             staticItems: [
@@ -63,15 +63,15 @@ export class GameController extends Component {
             ],
         });
 
-        // 4. 初始化 BoardView
+        // 初始化 BoardView
         this.boardView.init(this.board, this.factory);
 
-        // 5. 初始化 InventoryView
+        // 初始化 InventoryView
         if (this.inventoryView && this.board.level) {
             this.inventoryView.init(this.board.level.items, this.factory);
         }
 
-        // 6. 注册跨区域拖拽回调
+        // 注册跨区域拖拽回调
         this.setupCrossDropCallbacks();
     }
 
