@@ -10,6 +10,10 @@
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
+    "javascript-obfuscator": "^5.4.1",
     "prettier": "^3.8.1"
+  },
+  "scripts": {
+    "obfuscate-wx": "node obfuscate_wx.js"
   }
 }
