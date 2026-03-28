@@ -217,14 +217,24 @@ export class Board {
 
           case gc.IdGlassReflector: {
             const glass = cell.item as gc.GlassReflector;
-            const allowedRays = [(glass.direction + 6) % 16, (glass.direction + 8) % 16, (glass.direction + 10) % 16];
+            const allowedRays = [
+              (glass.direction + 6) % 16,
+              (glass.direction + 8) % 16,
+              (glass.direction + 10) % 16,
+              (glass.direction + 14) % 16,
+              (glass.direction + 0) % 16,
+              (glass.direction + 2) % 16
+            ];
 
             if (allowedRays.indexOf(rayDire) !== -1) {
               const refDir = reflectAngle(rayDire, glass.direction);
               cell.halfColors[refDir] = gc.Color.add(cell.halfColors[refDir], rayColor);
               const refStep = gc.getGridStep(refDir);
               this.traceRay(x + refStep[0], y + refStep[1], refDir, rayColor, depth + 1);
+            } else {
+              shouldStopRay = true;
             }
+            // Penetrator: face hits continue, edge hits stop
             break;
           }
         }
