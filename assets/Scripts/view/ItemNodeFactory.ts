@@ -37,6 +37,7 @@ export class ItemNodeFactory {
                 templateName = 'Reflector90';
                 break;
             case gc.IdReflector45:
+                // rotate between odd directions (1, 3, 5, 7, 9, 11, 13, 15)
                 templateName = 'Reflector45';
                 break;
             case gc.IdGlassReflector:

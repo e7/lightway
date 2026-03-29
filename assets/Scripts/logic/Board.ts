@@ -209,9 +209,23 @@ export class Board {
 
           case gc.IdReflector45: {
             const ref45 = cell.item as gc.Reflector45;
-            const newDir = reflectAngle(rayDire, ref45.direction);
-            cell.halfColors[newDir] = gc.Color.add(cell.halfColors[newDir], rayColor);
-            rayDire = newDir;
+            // 45-degree mirror only reflects if hitting from the front side (+-90 degrees from front-on hit)
+            // Mirror direction is the normal. front-on hit is direction + 8.
+            // Allowed rays are offset by [-3, -1, 1, 3] from direction + 8.
+            const allowedRays = [
+              (ref45.direction + 5) % 16,
+              (ref45.direction + 7) % 16,
+              (ref45.direction + 9) % 16,
+              (ref45.direction + 11) % 16
+            ];
+
+            if (allowedRays.indexOf(rayDire) !== -1) {
+              const newDir = reflectAngle(rayDire, ref45.direction);
+              cell.halfColors[newDir] = gc.Color.add(cell.halfColors[newDir], rayColor);
+              rayDire = newDir;
+            } else {
+              shouldStopRay = true;
+            }
             break;
           }
 

@@ -180,7 +180,16 @@ export class BoardView extends Component {
             // 没有发生拖拽位移，视作"点击"来旋转道具
             const ref = this.draggedItem as any;
             if (typeof ref.direction !== 'undefined') {
-                ref.direction = (ref.direction + 2) % 16 as gc.Direction;
+                if (ref.type === gc.IdReflector45) {
+                    // 45度镜必须在奇数方向上(1, 3, 5...)才能正确反射所有光线方向(米字)
+                    if (ref.direction % 2 === 0) {
+                        ref.direction = (ref.direction + 1) % 16 as gc.Direction;
+                    } else {
+                        ref.direction = (ref.direction + 2) % 16 as gc.Direction;
+                    }
+                } else {
+                    ref.direction = (ref.direction + 2) % 16 as gc.Direction;
+                }
             }
         }
 
