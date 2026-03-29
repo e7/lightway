@@ -46,7 +46,7 @@ export class GameController extends Component {
         }
 
         // 异步加载第一关
-        this.loadLevel(4);
+        this.loadLevel(7);
     }
 
     /**
