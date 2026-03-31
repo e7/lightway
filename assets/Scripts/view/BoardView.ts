@@ -345,6 +345,20 @@ export class BoardView extends Component {
                         }
                         break;
                     }
+                    case gc.IdWall: {
+                        let wallNode = this.itemNodeMap.get(cell.item);
+                        if (!wallNode && this.factory) {
+                            wallNode = this.factory.createNode(cell.item);
+                            if (wallNode) {
+                                this.node.addChild(wallNode);
+                                this.itemNodeMap.set(cell.item, wallNode);
+                            }
+                        }
+                        if (wallNode) {
+                            this.setNodeToCell(wallNode, idxColum, idxRow);
+                        }
+                        break;
+                    }
                 }
             })
         });

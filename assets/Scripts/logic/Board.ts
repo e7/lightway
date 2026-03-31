@@ -4,6 +4,7 @@ import { reflectAngle } from './Reflect';
 export class Level {
   staticItems: { x: number; y: number; item: gc.Item }[];
   items: gc.Item[];
+  walls?: number[][]; // [ [x, y], [x, y], ... ]
 }
 
 export class Board {
@@ -29,6 +30,15 @@ export class Board {
     level.staticItems.forEach((element) => {
       this.grid[element.y][element.x].item = element.item;
     });
+
+    // 处理捷径定义的墙 (walls: [[x,y],[x,y]])
+    if (level.walls) {
+      level.walls.forEach(([x, y]) => {
+        if (x >= 0 && x < this.size && y >= 0 && y < this.size) {
+          this.grid[y][x].item = { type: gc.IdWall };
+        }
+      });
+    }
   }
 
   // 清空光路及灯光状态防止残留
@@ -251,6 +261,10 @@ export class Board {
             // Penetrator: face hits continue, edge hits stop
             break;
           }
+
+          case gc.IdWall:
+            shouldStopRay = true;
+            break;
         }
       }
 

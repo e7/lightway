@@ -43,6 +43,9 @@ export class ItemNodeFactory {
             case gc.IdGlassReflector:
                 templateName = 'GlassReflector';
                 break;
+            case gc.IdWall:
+                templateName = 'Wall';
+                break;
             default:
                 return null;
         }

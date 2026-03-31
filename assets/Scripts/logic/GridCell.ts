@@ -136,6 +136,8 @@ export const IdReflector90 = 'Reflector90' as const;   // 反射镜，反射角9
 type _Reflector90 = typeof IdReflector90;
 export const IdGlassReflector = 'GlassReflector' as const; // 玻璃镜，同时具有反射（90度）和透射功能
 type _GlassReflector = typeof IdGlassReflector;
+export const IdWall = 'Wall' as const; // 墙，阻断所有方向的光线
+type _Wall = typeof IdWall;
 
 export interface RaySource {
   readonly type: _RaySource;
@@ -177,8 +179,12 @@ export interface GlassReflector {
   direction: Direction;
 }
 
+export interface Wall {
+  type: _Wall;
+}
+
 // 道具
-export type Item = RaySource | LittleLight | Reflector45 | Reflector90 | GlassReflector;
+export type Item = RaySource | LittleLight | Reflector45 | Reflector90 | GlassReflector | Wall;
 
 export interface Ray {
   direction: Direction;
