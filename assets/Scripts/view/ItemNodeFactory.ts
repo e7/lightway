@@ -46,6 +46,9 @@ export class ItemNodeFactory {
             case gc.IdWall:
                 templateName = 'Wall';
                 break;
+            case gc.IdPipe:
+                templateName = 'Pipe';
+                break;
             default:
                 return null;
         }

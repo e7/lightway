@@ -5,6 +5,7 @@ export class Level {
   staticItems: { x: number; y: number; item: gc.Item }[];
   items: gc.Item[];
   walls?: number[][]; // [ [x, y], [x, y], ... ]
+  pipes?: { x: number; y: number; dir: number }[];
 }
 
 export class Board {
@@ -36,6 +37,15 @@ export class Board {
       level.walls.forEach(([x, y]) => {
         if (x >= 0 && x < this.size && y >= 0 && y < this.size) {
           this.grid[y][x].item = { type: gc.IdWall };
+        }
+      });
+    }
+
+    // 处理捷径定义的管道 (pipes: [{x,y,dir}, ...])
+    if (level.pipes) {
+      level.pipes.forEach((p) => {
+        if (p.x >= 0 && p.x < this.size && p.y >= 0 && p.y < this.size) {
+          this.grid[p.y][p.x].item = { type: gc.IdPipe, direction: p.dir as gc.Direction };
         }
       });
     }
@@ -265,6 +275,15 @@ export class Board {
           case gc.IdWall:
             shouldStopRay = true;
             break;
+
+          case gc.IdPipe: {
+            const pipe = cell.item as gc.Pipe;
+            // 只有当光线方向与管道轴向一致时才允许通过
+            if (rayDire % 8 !== pipe.direction % 8) {
+              shouldStopRay = true;
+            }
+            break;
+          }
         }
       }
 

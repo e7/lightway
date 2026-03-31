@@ -359,6 +359,22 @@ export class BoardView extends Component {
                         }
                         break;
                     }
+                    case gc.IdPipe: {
+                        let pipeNode = this.itemNodeMap.get(cell.item);
+                        if (!pipeNode && this.factory) {
+                            pipeNode = this.factory.createNode(cell.item);
+                            if (pipeNode) {
+                                this.node.addChild(pipeNode);
+                                this.itemNodeMap.set(cell.item, pipeNode);
+                            }
+                        }
+                        if (pipeNode) {
+                            this.setNodeToCell(pipeNode, idxColum, idxRow);
+                            const pipe = cell.item as gc.Pipe;
+                            pipeNode.angle = pipe.direction * 22.5;
+                        }
+                        break;
+                    }
                 }
             })
         });

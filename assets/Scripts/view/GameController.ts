@@ -21,7 +21,7 @@ export class GameController extends Component {
     private static readonly TEMPLATE_NAMES = [
         'RaySourceRed', 'RaySourceGreen', 'RaySourceBlue',
         'RaySourceYellow', 'RaySourceCyan', 'RaySourceMagenta', 'RaySourceWhite',
-        'Reflector90', 'Reflector45', 'GlassReflector', 'Wall',
+        'Reflector90', 'Reflector45', 'GlassReflector', 'Wall', 'Pipe',
     ];
 
     start() {
@@ -75,7 +75,8 @@ export class GameController extends Component {
                 item: this.inflateItem(s.item)
             })),
             items: data.items.map((i: any) => this.inflateItem(i)),
-            walls: data.walls
+            walls: data.walls,
+            pipes: data.pipes
         };
 
         // 2. 创建 Board 并加载关卡

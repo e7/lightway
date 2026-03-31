@@ -138,6 +138,8 @@ export const IdGlassReflector = 'GlassReflector' as const; // 玻璃镜，同时
 type _GlassReflector = typeof IdGlassReflector;
 export const IdWall = 'Wall' as const; // 墙，阻断所有方向的光线
 type _Wall = typeof IdWall;
+export const IdPipe = 'Pipe' as const; // 管道，只允许特定方向的光线通过
+type _Pipe = typeof IdPipe;
 
 export interface RaySource {
   readonly type: _RaySource;
@@ -183,8 +185,13 @@ export interface Wall {
   type: _Wall;
 }
 
+export interface Pipe {
+  type: _Pipe;
+  direction: Direction;
+}
+
 // 道具
-export type Item = RaySource | LittleLight | Reflector45 | Reflector90 | GlassReflector | Wall;
+export type Item = RaySource | LittleLight | Reflector45 | Reflector90 | GlassReflector | Wall | Pipe;
 
 export interface Ray {
   direction: Direction;
